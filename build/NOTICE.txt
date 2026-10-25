@@ -1,0 +1,37 @@
+VOTC-WH3 — Voices of the Court for Total War: WARHAMMER III
+===========================================================
+
+This program is a modified version of "Voices of the Court" (VOTC)
+  Copyright (C) MrAndroPC and the Voices of the Court contributors
+  https://github.com/Voices-of-the-Court/VOTC
+
+Modifications (port to Total War: WARHAMMER III), 2026-10-25 and later:
+  Copyright (C) 2026 daomeidanzi-debug
+  - replaced the Crusader Kings III integration with a Warhammer III
+    campaign script (votc_wh3) and a file-based bridge
+  - new game actions, prompts, lore and per-campaign history
+  The full list of changes is the git history of the source repository.
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+The full license text is in LICENSE.txt next to this file.
+
+Complete corresponding source code:
+  https://github.com/daomeidanzi-debug/votc-wh3
+  (each release links the exact source it was built from)
+
+This is an unofficial fan project. It is not affiliated with or endorsed by
+Creative Assembly, SEGA, Games Workshop or the original VOTC authors.
+"Total War" and "Warhammer" are trademarks of their respective owners.
+
+----------------------------------------------------------------------------
+本程序是 Voices of the Court（VOTC）的修改版，移植到《全面战争：战锤3》。
+原作者：MrAndroPC 及 VOTC 贡献者；战锤3移植：daomeidanzi-debug（2026-10-25 起）。
+按 GNU 通用公共许可证第 3 版（GPL-3.0）发布，不提供任何担保；
+完整许可证见同目录 LICENSE.txt，完整源代码见上方链接。
+本项目为非官方玩家作品，与 Creative Assembly、SEGA、Games Workshop 及原作者无关。

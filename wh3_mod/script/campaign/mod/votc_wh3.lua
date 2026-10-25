@@ -1,6 +1,13 @@
 --------------------------------------------------------------------------------
 -- Voices of the Court - Total War: WARHAMMER III bridge
 --
+-- Part of VOTC-WH3, a modified version of Voices of the Court
+-- (Copyright (C) MrAndroPC and VOTC contributors, https://github.com/Voices-of-the-Court/VOTC).
+-- Warhammer III port Copyright (C) 2026 daomeidanzi-debug.
+-- Licensed under the GNU General Public License v3.0, WITHOUT ANY WARRANTY; the license
+-- text is in votc_wh3_license.txt in this pack. Source: https://github.com/daomeidanzi-debug/votc-wh3
+-- Unofficial fan project, not affiliated with Creative Assembly, SEGA or Games Workshop.
+--
 -- Talks to the VOTC desktop app through plain files in the game's root folder
 -- (the working directory of Warhammer3.exe, same place script_log.txt goes):
 --

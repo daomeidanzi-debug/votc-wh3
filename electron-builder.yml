@@ -1,5 +1,6 @@
 appId: com.votc.wh3
 productName: VOTC-WH3
+copyright: "Copyright (C) MrAndroPC and VOTC contributors; Warhammer III port (C) 2026 daomeidanzi-debug. GPL-3.0"
 directories:
   buildResources: build
 asar: true
@@ -102,6 +103,12 @@ appImage:
 npmRebuild: false
 # No update feed: the original feed would replace this port with the CK3 build.
 publish: null
+# GPL-3.0: ship the license, notice and source link next to the program
+extraFiles:
+  - from: LICENSE
+    to: LICENSE.txt
+  - from: build/NOTICE.txt
+    to: NOTICE.txt
 extraResources:
   - from: wh3_mod/votc_wh3.pack
     to: votc_wh3.pack

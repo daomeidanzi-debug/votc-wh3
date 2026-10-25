@@ -24,6 +24,9 @@ function collect() {
     }
   };
   for (const d of SOURCE_DIRS) walk(path.join(HERE, d));
+  // GPL-3.0 §4: every copy of the mod carries the license text. The mod loader only
+  // loads .lua files, so the game ignores it.
+  files.push({ rel: 'script\\campaign\\mod\\votc_wh3_license.txt', full: path.join(HERE, '..', 'LICENSE') });
   return files.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
 }
 
