@@ -55,12 +55,17 @@ export class ActionEngine {
       
       // 1) Build candidate actions for this source character
       const loaded = actionRegistry.getAllActions(/* includeDisabled = */ false);
+      // Warhammer III: a rank-and-file soldier can talk but cannot act for a faction or character
+      const npcIsUnit = !!npc.wh3?.character?.isUnit;
 
       const available: SchemaBuildInput["availableActions"] = [];
       for (const act of loaded) {
         // Check for cancellation during action gathering
         if (signal?.aborted) {
           return { autoApproved: [], needsApproval: [] };
+        }
+        if (npcIsUnit && act.definition.allowUnits !== true) {
+          continue;
         }
 
         try {

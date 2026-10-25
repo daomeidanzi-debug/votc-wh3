@@ -181,13 +181,112 @@ def main():
     st = json.load(open('votc_state.json', encoding='utf-8'))
     check(st['ok'] and st['target']['cqi'] == 2 and st['targetSource'] == 'settlement', 'settlement resolves to warboss')
 
-    print('diplomacy panel overrides selection')
-    L.execute('mock.listeners["CharacterSelected"]({ character = function() return hero end }); mock.panel_open = true; mock.diplomacy_faction_cqi = orcs:command_queue_index()')
-    write_cmds('return { cmds = { { id = 6, ts = %d, op = "export", reqId = "r6" } } }' % now)
+    next_id = [6.0]
+    def export(label):
+        next_id[0] += 0.01
+        write_cmds('return { cmds = { { id = %.2f, ts = %d, op = "export", reqId = "%s" } } }' % (next_id[0], now, label))
+        poll(L)
+        return json.load(open('votc_state.json', encoding='utf-8'))
+
+    L.execute(r'''
+        elves = mock.add_faction("wh2_main_hef_eataine", { attitude = { wh_main_emp_empire = 30 } })
+        tyrion = mock.add_character(6, elves, { forename = "names_name_tyrion", leader = true })
+        mock.loc["names_name_tyrion"] = "泰瑞昂"
+    ''')
+
+    print('diplomacy screen: the single foreign faction shown')
+    L.execute(r'''
+        mock.listeners["CharacterSelected"]({ character = function() return hero end })
+        mock.panels.diplomacy_dropdown = true
+        mock.listeners["PanelOpenedCampaign"]({ string = "diplomacy_dropdown" })
+        mock.ui["diplomacy_dropdown/faction_right_status_panel"] = mock.ui_component({}, {
+            mock.ui_component({ CcoCampaignFaction = tostring(orcs:command_queue_index()) }),
+            mock.ui_component({ CcoCampaignFaction = tostring(player:command_queue_index()) }),
+        })
+    ''')
+    st = export('dip1')
+    check(st['ok'] and st['target']['cqi'] == 2 and st['targetSource'] == 'diplomacy', 'diplomacy panel faction resolved (player faction ignored)')
+
+    print('diplomacy screen: several factions shown and none clicked')
+    L.execute(r'''
+        mock.ui["diplomacy_dropdown/faction_right_status_panel"] = nil
+        mock.ui["diplomacy_dropdown"] = mock.ui_component({}, {
+            mock.ui_component({ CcoCampaignFaction = tostring(orcs:command_queue_index()) }),
+            mock.ui_component({}, { mock.ui_component({ CcoCampaignFaction = tostring(elves:command_queue_index()) }) }),
+        })
+    ''')
+    st = export('dip2')
+    check(not st['ok'] and st['error'] == 'diplomacy_pick_faction', 'ambiguous diplomacy screen asks the player to click a faction')
+
+    print('diplomacy screen: clicking a faction row picks it')
+    L.execute(r'''
+        local row = mock.ui_component({ CcoCampaignFaction = tostring(elves:command_queue_index()) }, { mock.ui_component({}) })
+        mock.click(row._children[1])   -- the click lands on a child of the row
+    ''')
+    st = export('dip3')
+    check(st['ok'] and st['target']['cqi'] == 6 and st['target']['name'] == '泰瑞昂', 'clicked faction leader is the target')
+    L.execute(r'''
+        local portrait = mock.ui_component({ CcoCampaignCharacter = "2" })
+        mock.click(portrait)
+    ''')
+    st = export('dip4')
+    check(st['ok'] and st['target']['cqi'] == 2, 'clicking a leader portrait in diplomacy picks that faction')
+    L.execute('mock.listeners["PanelOpenedCampaign"]({ string = "diplomacy_dropdown" })')
+    check(L.eval('votc_wh3_internal.get_last_diplomacy_faction()') is None, 'reopening diplomacy forgets the previous pick')
+    L.execute('mock.panels.diplomacy_dropdown = false; mock.ui["diplomacy_dropdown"] = nil')
+
+    print('character details panel (heroes)')
+    L.execute(r'''
+        mock.listeners["CharacterSelected"]({ character = function() return grim end })
+        mock.panels.character_details_panel = true
+        mock.ui["character_details_panel/character_context_parent"] = mock.ui_component({ CcoCampaignCharacter = "3" })
+    ''')
+    st = export('det1')
+    check(st['ok'] and st['target']['cqi'] == 3 and st['targetSource'] == 'details', 'hero shown in the details panel is the target')
+    L.execute('mock.ui["character_details_panel/character_context_parent"] = mock.ui_component({ CcoCampaignCharacter = "1" })')
+    st = export('det2')
+    check(st['ok'] and st['target']['cqi'] == 2, 'details panel of your own leader falls back to the selection')
+    L.execute('mock.panels.character_details_panel = false')
+
+    print('cards in an army panel')
+    L.execute(r'''
+        local swords = karl._units[2]
+        mock.cco_values.CcoCampaignUnit = { [swords:command_queue_index()] = { Name = "第二剑士团", ["UnitRecordContext.HistoricalDescription"] = "帝国最坚韧的步兵。" } }
+        local army_panel = mock.ui_component({ CcoCampaignCharacter = "1" }, {
+            mock.ui_component({ CcoCampaignUnit = tostring(swords:command_queue_index()) }, { mock.ui_component({}) }),
+            mock.ui_component({ CcoCampaignUnit = tostring(karl._units[1]:command_queue_index()) }),
+        })
+        mock.click(army_panel._children[1]._children[1])
+    ''')
+    sel = L.eval('votc_wh3_internal.get_last_selected()')
+    check(sel is not None and sel.kind == 'unit', 'clicking a unit card selects the unit')
+    st = export('unit1')
+    t = st['target']
+    check(st['ok'] and t.get('isUnit') is True and t['cqi'] < 0 and st['targetSource'] == 'unit', 'unit exported as a soldier with a negative id')
+    check(t['name'] == '第二剑士团' and t['commanderName'] == '卡尔·弗兰茨' and t['strength'] == 80, 'unit name, commander and strength')
+    check(t['biography'] == '帝国最坚韧的步兵。' and 'targetFaction' not in st, 'unit lore read, own faction has no targetFaction')
+    L.execute(r'''
+        mock.listeners["CharacterSelected"]({ character = function() return grim end })
+        local lord_card = mock.ui_component({ CcoCampaignCharacter = "1" }, { mock.ui_component({ CcoCampaignUnit = tostring(karl._units[1]:command_queue_index()) }) })
+        mock.click(lord_card._children[1])
+    ''')
+    st = export('unit2')
+    check(st['ok'] and st['target']['cqi'] == 2, "your own lord's card (a commander unit) does not replace the target")
+    L.execute(r'''
+        local boyz = grim._units[2]
+        mock.click(mock.ui_component({ CcoCampaignUnit = tostring(boyz:command_queue_index()) }))
+    ''')
+    st = export('unit3')
+    check(st['ok'] and st['target'].get('isUnit') and st['targetFaction']['key'] == 'wh_main_grn_greenskins', 'enemy unit carries its faction')
+    L.execute('mock.click(mock.ui_component({}, {}))')
+    st = export('unit4')
+    check(st['target'].get('isUnit'), 'clicking something without a context keeps the selection')
+    L.execute('mock.click(mock.ui_component({ CcoCampaignCharacter = "3" }))')
+    st = export('hero1')
+    check(st['ok'] and st['target']['cqi'] == 3 and st['targetSource'] == 'selection', 'clicking a hero card selects the hero')
+    write_cmds('return { cmds = { { id = 6.9, ts = %d, op = "kill", cqi = -%d } } }' % (now, 5003))
     poll(L)
-    st = json.load(open('votc_state.json', encoding='utf-8'))
-    check(st['ok'] and st['target']['cqi'] == 2 and st['targetSource'] == 'diplomacy', 'diplomacy target resolved')
-    L.execute('mock.panel_open = false')
+    check(ack()['results'][0]['ok'] is False, 'character commands never match a unit id')
 
     print('actions')
     write_cmds('return { cmds = {'
@@ -294,9 +393,14 @@ def make_fixtures(out_dir):
     out_dir = os.path.abspath(out_dir)
     os.makedirs(out_dir, exist_ok=True)
     now = int(time.time())
-    for name, selector in (('state_foreign.json', 'grim'), ('state_own_hero.json', 'hero')):
+    selectors = (
+        ('state_foreign.json', 'mock.listeners["CharacterSelected"]({ character = function() return grim end })'),
+        ('state_own_hero.json', 'mock.listeners["CharacterSelected"]({ character = function() return hero end })'),
+        ('state_enemy_unit.json', 'mock.click(mock.ui_component({ CcoCampaignUnit = tostring(grim._units[2]:command_queue_index()) }))'),
+    )
+    for name, select in selectors:
         L = fresh(tempfile.mkdtemp(prefix='votc_fx_'))
-        L.execute('mock.listeners["CharacterSelected"]({ character = function() return %s end })' % selector)
+        L.execute(select)
         write_cmds('return { cmds = { { id = 1, ts = %d, op = "export", reqId = "fixture" } } }' % now)
         poll(L)
         with open('votc_state.json', 'rb') as src, open(os.path.join(out_dir, name), 'wb') as dst:

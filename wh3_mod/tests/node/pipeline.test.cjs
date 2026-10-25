@@ -158,6 +158,27 @@ function pickArgs(argDefs) {
     check(/点选/.test(describeExportError('nothing_selected', 'zh')), 'readable zh error');
   });
 
+  await section('talking to a rank-and-file unit', async () => {
+    const unitState = fixture('state_enemy_unit.json');
+    const gd = buildGameDataFromWh3(unitState, 'zh');
+    const npc = gd.characters.get(gd.aiID);
+    check(unitState.target.isUnit === true && gd.aiID < 0, 'unit target has a negative id');
+    check(npc.fullName.endsWith('的一名士兵') && npc.liege === '格里姆格 铁皮', 'soldier persona under the warboss: ' + npc.fullName);
+    check(gd.scene.includes('soldier'), 'scene describes a soldier');
+    for (const rel of ['character_description/standard/pListMccTest2.js', 'character_description/standard/pListMccTest2_ZH.js']) {
+      const sandbox = { module: { exports: {} }, exports: {}, console };
+      vm.runInContext(fs.readFileSync(path.join(PROMPTS_DIR, rel), 'utf-8'), vm.createContext(sandbox));
+      const text = sandbox.module.exports(gd, gd.aiID);
+      check(/regiment\(|所属部队（/.test(text) && /commander\(|指挥官（/.test(text) && !/undefined|NaN|rank\(0\)|等级（0）/.test(text), `${rel} describes the regiment`);
+    }
+    // ActionEngine only offers actions with allowUnits to a unit; only noOp has it
+    const actionFiles = fs.readdirSync(ACTIONS_DIR).filter((f) => f.endsWith('.js'));
+    const allowed = actionFiles.map((f) => loadAction(path.join(ACTIONS_DIR, f))).filter((d) => d.allowUnits === true).map((d) => d.signature);
+    check(JSON.stringify(allowed) === '["noOp"]', 'units can only talk (allowUnits on noOp only): ' + allowed.join(','));
+    const engineSrc = fs.readFileSync(path.join(SRC, 'actions', 'ActionEngine.ts'), 'utf-8');
+    check(/npcIsUnit && act\.definition\.allowUnits !== true/.test(engineSrc), 'ActionEngine filters actions for units');
+  });
+
   await section('conversation history per campaign', async () => {
     const { VOTC_SUMMARIES_DIR } = load('utils/paths.js');
     const { CAMPAIGN_INFO_FILE } = load('gameData/GameData.js');

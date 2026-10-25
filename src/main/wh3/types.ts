@@ -43,6 +43,17 @@ export interface Wh3Character {
   typeDescription?: string;
   /** historical description of the character's unit; a full biography for legendary lords */
   biography?: string;
+  /**
+   * Set when the conversation partner is a rank-and-file unit (one of its soldiers) rather
+   * than a character. Its cqi is the negated unit cqi, so character commands never match it.
+   */
+  isUnit?: boolean;
+  unitCqi?: number;
+  unitKey?: string;
+  /** remaining strength of the unit in percent */
+  strength?: number;
+  commanderCqi?: number;
+  commanderName?: string;
 }
 
 export interface Wh3FactionRef {
@@ -85,7 +96,8 @@ export type Wh3StateError =
   | 'target_not_found'
   | 'faction_has_no_leader'
   | 'settlement_unowned'
-  | 'target_is_player';
+  | 'target_is_player'
+  | 'diplomacy_pick_faction';
 
 export interface Wh3State {
   version: string;
@@ -93,7 +105,7 @@ export interface Wh3State {
   ok: boolean;
   error?: Wh3StateError | string;
   time?: number;
-  targetSource?: 'requested' | 'diplomacy' | 'selection' | 'settlement' | 'none';
+  targetSource?: 'requested' | 'diplomacy' | 'details' | 'selection' | 'unit' | 'settlement' | 'none';
   turn?: number;
   campaign?: string;
   /** stable id of this playthrough, kept in the savegame (absent with bridge versions before 1.1) */

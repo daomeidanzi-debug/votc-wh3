@@ -69,12 +69,20 @@ function mock.add_region(key, owner)
 	return r
 end
 
+local next_unit_cqi = 5000
+mock.units = {}
 local function make_unit(key, class, strength)
-	return {
+	next_unit_cqi = next_unit_cqi + 1
+	local cqi = next_unit_cqi
+	local u = {
+		_cqi = cqi,
 		unit_key = function() return key end,
 		unit_class = function() return class end,
 		percentage_proportion_of_full_strength = function() return strength or 100 end,
+		command_queue_index = function() return cqi end,
 	}
+	mock.units[cqi] = u
+	return u
 end
 
 function mock.add_character(cqi, faction, opts)
@@ -100,18 +108,19 @@ function mock.add_character(cqi, faction, opts)
 	function c:has_region() return self._region ~= nil end
 	function c:region() return self._region end
 	function c:has_military_force() return opts.army == true end
-	function c:military_force()
-		local me = self
-		return {
-			unit_list = function() return list(me._units) end,
-			character_list = function() return list({ me }) end,
-		}
-	end
+	local mf = {
+		unit_list = function() return list(c._units) end,
+		character_list = function() return list({ c }) end,
+		general_character = function() return c end,
+		is_armed_citizenry = function() return false end,
+	}
+	function c:military_force() return mf end
 	if opts.army then
 		c._units[#c._units + 1] = make_unit(opts.subtype or "wh_main_emp_lord", "com")
 		for _, u in ipairs(opts.units or {}) do
 			c._units[#c._units + 1] = make_unit(u, "inf_mel", 80)
 		end
+		faction._forces[#faction._forces + 1] = mf
 	end
 	if opts.leader then faction._leader = c end
 	mock.characters[cqi] = c
@@ -122,6 +131,13 @@ end
 common = {
 	get_localised_string = function(key)
 		return mock.loc[key] or ""
+	end,
+	-- character context ids convert to a cqi through "CQI", like the real engine
+	get_context_value = function(cco_type, id, expression)
+		if cco_type == "CcoCampaignCharacter" and expression == "CQI" then
+			return tonumber(id)
+		end
+		return nil
 	end,
 }
 
@@ -135,15 +151,27 @@ core = {
 	get_ui_root = function() return {} end,
 }
 
+-- UI components: mock.ui_component({ CcoCampaignUnit = "5002" }, children) builds a node whose
+-- GetContextObjectId answers from the table; children get Parent() links.
+function mock.ui_component(contexts, children)
+	local node = { _contexts = contexts or {}, _children = children or {}, _parent = nil }
+	function node:GetContextObjectId(t) return self._contexts[t] end
+	function node:Parent() return self._parent end
+	function node:ChildCount() return #self._children end
+	function node:Find(i) return self._children[i + 1] end
+	for _, child in ipairs(node._children) do child._parent = node end
+	return node
+end
+
+mock.ui = {}      -- "a/b/c" path -> component, for find_uicomponent
+mock.panels = {}  -- panel name -> true when open
+
+function mock.click(component)
+	mock.listeners["ComponentLClickUp"]({ component = component })
+end
+
 function find_uicomponent(root, ...)
-	local path = { ... }
-	if path[#path] == "faction_right_status_panel" and mock.panel_open then
-		return {
-			GetContextObjectId = function(_, t) return mock.diplomacy_faction_cqi and tostring(mock.diplomacy_faction_cqi) or "" end,
-			ChildCount = function() return 0 end,
-		}
-	end
-	return false
+	return mock.ui[table.concat({ ... }, "/")] or false
 end
 
 function UIComponent(x) return x end
@@ -176,13 +204,22 @@ function cm:get_region(key) return mock.regions[key] or false end
 function cm:get_character_by_cqi(cqi) return mock.characters[tonumber(cqi)] or false end
 function cm:faction_has_trade_agreement_with_faction(a, b) return false end
 function cm:get_campaign_ui_manager()
-	return { is_panel_open = function(_, p) return p == "diplomacy_dropdown" and mock.panel_open end }
+	return { is_panel_open = function(_, p) return mock.panels[p] == true end }
 end
 function cm:model()
 	return {
 		faction_for_command_queue_index = function(_, cqi)
 			for _, f in pairs(mock.factions) do if f:command_queue_index() == cqi then return f end end
 			return NULL
+		end,
+		world = function()
+			return {
+				faction_list = function()
+					local all = {}
+					for _, f in pairs(mock.factions) do all[#all + 1] = f end
+					return list(all)
+				end,
+			}
 		end,
 	}
 end

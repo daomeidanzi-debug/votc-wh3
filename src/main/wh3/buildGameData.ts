@@ -26,6 +26,7 @@ const TYPE_LABELS: Record<string, string> = {
   dignitary: 'Dignitary hero',
   engineer: 'Engineer hero',
   runesmith: 'Runesmith hero',
+  unit: 'Soldier',
 };
 
 export function characterTypeLabel(typeKey: string): string {
@@ -62,9 +63,20 @@ function toCharacter(
   c.fullName = info.name;
   c.shortName = info.forename || info.name;
   c.firstName = info.forename || info.name;
-  c.primaryTitle = info.isFactionLeader
-    ? `Faction leader of ${faction.name}${subtype}`
-    : `${typeLabel} of ${faction.name}${subtype}`;
+  if (info.isUnit) {
+    // one soldier speaking for the regiment; the unit name is all the game knows about them
+    const soldier = lang === 'zh' ? `${info.name}的一名士兵` : `a soldier of the ${info.name}`;
+    c.fullName = soldier;
+    c.shortName = soldier;
+    c.firstName = soldier;
+    c.primaryTitle = info.commanderName
+      ? `Soldier of the ${info.name} regiment in ${info.commanderName}'s army (${faction.name})`
+      : `Soldier of the ${info.name} regiment (${faction.name})`;
+  } else {
+    c.primaryTitle = info.isFactionLeader
+      ? `Faction leader of ${faction.name}${subtype}`
+      : `${typeLabel} of ${faction.name}${subtype}`;
+  }
   c.titleRankConcept = typeLabel;
   c.sheHe = info.isMale ? 'he' : 'she';
   c.age = finite(info.age);
@@ -78,7 +90,9 @@ function toCharacter(
   c.isIndependentRuler = info.isFactionLeader && !faction.isMasterOfPlayer;
   c.isKnight = false;
   c.capitalLocation = faction.capitalName ?? '';
-  c.liege = !info.isFactionLeader && faction.leaderName ? faction.leaderName : '';
+  c.liege = info.isUnit && info.commanderName
+    ? info.commanderName
+    : !info.isFactionLeader && faction.leaderName ? faction.leaderName : '';
   c.topLiege = c.liege;
 
   if (isPlayer) {
@@ -122,6 +136,8 @@ export function describeScene(state: Wh3State): string {
       return 'a diplomatic audience between the two factions';
     case 'settlement':
       return 'a meeting about a settlement';
+    case 'unit':
+      return 'a word with a common soldier in the ranks';
     default:
       if (state.target && state.player && state.target.factionKey === state.player.factionKey) {
         return 'a private council with one of the player\'s own commanders';
@@ -172,11 +188,14 @@ export function describeExportError(error: string | undefined, lang: string): st
   const zh = lang === 'zh';
   switch (error) {
     case 'nothing_selected':
-      return zh ? '请先在战役地图上点选一个角色（领主/英雄）或定居点，或打开外交界面，再按快捷键。'
-        : 'Select a lord, hero or settlement on the campaign map (or open the diplomacy screen) before pressing the hotkey.';
+      return zh ? '请先点选一个对话对象再按快捷键：地图上的领主、英雄或定居点，军队面板里的英雄或部队卡片，打开的人物详情，或外交界面里的派系。'
+        : 'Pick someone first: a lord, hero or settlement on the map, a hero or unit card in an army, an open character details panel, or a faction in the diplomacy screen.';
     case 'target_is_player':
       return zh ? '你选中的是自己的派系领袖。请选中另一个角色。'
         : 'You selected your own faction leader. Select another character.';
+    case 'diplomacy_pick_faction':
+      return zh ? '外交界面已打开，但不确定你想和哪个派系对话。请在外交界面里点一下对方派系（或它的领袖头像），再按快捷键。'
+        : 'The diplomacy screen is open but it is unclear which faction you mean. Click the other faction (or its leader) in the diplomacy screen, then press the hotkey.';
     case 'target_not_found':
       return zh ? '选中的角色已不存在（可能已阵亡）。请重新选择。'
         : 'The selected character no longer exists. Select someone else.';

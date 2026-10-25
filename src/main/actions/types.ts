@@ -88,6 +88,8 @@ export interface ActionDefinition {
   description: I18nString | DynamicDescriptionFunction;
   args: ActionArgumentDefinition[] | DynamicArgsFunction;
   isDestructive?: boolean; // New field to mark destructive actions
+  /** Warhammer III: also offer this action when the NPC is a rank-and-file unit (default: no) */
+  allowUnits?: boolean;
   check: (context: ActionCheckContext) => Promise<ActionCheckResult> | ActionCheckResult;
   run: (context: ActionRunContext) => Promise<I18nString | ActionFeedback | void> | I18nString | ActionFeedback | void;
 }

@@ -58,6 +58,7 @@ const TYPE_LABELS = {
     dignitary: "dignitary (hero)",
     engineer: "engineer (hero)",
     runesmith: "runesmith (hero)",
+    unit: "common soldier",
 };
 
 // How each race talks; used to give the AI a recognisable voice.
@@ -110,9 +111,15 @@ function buildCharacterItems(char, gameData) {
     if (c.subtypeName) items.push(`kind(${c.subtypeName})`);
     items.push(`race(${f.subcultureName || f.cultureName})`);
     if (VOICES[f.subcultureKey]) items.push(`voice(${VOICES[f.subcultureKey]})`);
-    items.push(`gender(${c.isMale ? "male" : "female"})`);
-    if (c.age > 0) items.push(`age(${c.age})`);
-    items.push(`rank(${c.rank})`);
+    if (c.isUnit) {
+        items.push(`regiment(${c.subtypeName}${typeof c.strength === "number" ? `, at ${c.strength}% strength` : ""})`);
+        if (c.commanderName) items.push(`commander(${c.commanderName})`);
+        items.push("a rank-and-file soldier: speaks only for themself and the regiment, cannot make decisions for the faction");
+    } else {
+        items.push(`gender(${c.isMale ? "male" : "female"})`);
+        if (c.age > 0) items.push(`age(${c.age})`);
+        items.push(`rank(${c.rank})`);
+    }
     if (c.battlesFought > 0 || c.battlesWon > 0) items.push(`battles(won ${c.battlesWon}${c.battlesFought > 0 ? ` of ${c.battlesFought}` : ""})`);
     if (c.isWounded) items.push("currently wounded");
     if (char.traits && char.traits.length) items.push(`traits(${char.traits.map((t) => t.name).join(", ")})`);

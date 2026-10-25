@@ -58,6 +58,7 @@ const TYPE_LABELS = {
     dignitary: "使节（英雄）",
     engineer: "工程师（英雄）",
     runesmith: "符文铁匠（英雄）",
+    unit: "普通士兵",
 };
 
 // 各种族的说话风格
@@ -118,9 +119,15 @@ function buildCharacterItems(char, gameData) {
     if (c.subtypeName) items.push(`类型（${c.subtypeName}）`);
     items.push(`种族（${f.subcultureName || f.cultureName}）`);
     if (VOICES[f.subcultureKey]) items.push(`说话风格（${VOICES[f.subcultureKey]}）`);
-    items.push(`性别（${c.isMale ? "男" : "女"}）`);
-    if (c.age > 0) items.push(`年龄（${c.age}）`);
-    items.push(`等级（${c.rank}）`);
+    if (c.isUnit) {
+        items.push(`所属部队（${c.subtypeName}${typeof c.strength === "number" ? `，兵力 ${c.strength}%` : ""}）`);
+        if (c.commanderName) items.push(`指挥官（${c.commanderName}）`);
+        items.push("身份说明（普通士兵，只代表自己和所在部队说话，不能替派系做决定）");
+    } else {
+        items.push(`性别（${c.isMale ? "男" : "女"}）`);
+        if (c.age > 0) items.push(`年龄（${c.age}）`);
+        items.push(`等级（${c.rank}）`);
+    }
     if (c.battlesFought > 0 || c.battlesWon > 0) items.push(`战绩（胜 ${c.battlesWon}${c.battlesFought > 0 ? ` / 共 ${c.battlesFought}` : ""} 场）`);
     if (c.isWounded) items.push("目前负伤");
     if (char.traits && char.traits.length) items.push(`特质（${char.traits.map((t) => t.name).join("、")}）`);

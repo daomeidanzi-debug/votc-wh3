@@ -19,7 +19,7 @@
 -- is loaded with an empty environment, so it can only carry data.
 --------------------------------------------------------------------------------
 
-local VOTC_VERSION = "1.2.1"
+local VOTC_VERSION = "1.3.0"
 
 local STATE_FILE = "votc_state.json"
 local CMD_FILE = "votc_commands.lua"
@@ -473,43 +473,6 @@ local function export_faction(f, player)
 	return t
 end
 
--- find the faction shown on the right side of the diplomacy screen, if it is open
-local function find_context_faction(uic, depth)
-	if not uic or depth > 4 then
-		return nil
-	end
-	local id = try(function() return uic:GetContextObjectId("CcoCampaignFaction") end, nil)
-	local cqi = tonumber(id)
-	if cqi then
-		local f = try(function() return cm:model():faction_for_command_queue_index(cqi) end, nil)
-		if f and not f:is_null_interface() then
-			return f
-		end
-	end
-	local count = try(function() return uic:ChildCount() end, 0)
-	for i = 0, count - 1 do
-		local child = try(function() return UIComponent(uic:Find(i)) end, nil)
-		local f = find_context_faction(child, depth + 1)
-		if f then
-			return f
-		end
-	end
-	return nil
-end
-
-local function get_diplomacy_target_faction()
-	return try(function()
-		if not cm:get_campaign_ui_manager():is_panel_open("diplomacy_dropdown") then
-			return nil
-		end
-		local panel = find_uicomponent(core:get_ui_root(), "diplomacy_dropdown", "faction_right_status_panel")
-		if not panel then
-			return nil
-		end
-		return find_context_faction(panel, 0)
-	end, nil)
-end
-
 local function leader_of(f)
 	if f and try(function() return f:has_faction_leader() end, false) then
 		local leader = f:faction_leader()
@@ -520,23 +483,238 @@ local function leader_of(f)
 	return nil
 end
 
--- returns target character, source description, error code
+local function is_panel_open(name)
+	return try(function() return cm:get_campaign_ui_manager():is_panel_open(name) end, false)
+end
+
+local function local_faction_name()
+	return try(function() return cm:get_local_faction_name(true) end, nil)
+end
+
+local function is_player_leader(c)
+	return try(function() return c:is_faction_leader() and c:faction():name() == local_faction_name() end, false)
+end
+
+--------------------------------------------------------------------------------
+-- reading what the UI shows (context objects), as vanilla scripts do
+--------------------------------------------------------------------------------
+
+local function context_id(uic, cco_type)
+	local id = try(function() return uic:GetContextObjectId(cco_type) end, nil)
+	if type(id) == "string" and id ~= "" then
+		return id
+	end
+	return nil
+end
+
+local function character_from_context_id(id)
+	-- vanilla converts a CcoCampaignCharacter id through its CQI expression
+	local cqi = try(function() return common.get_context_value("CcoCampaignCharacter", id, "CQI") end, nil)
+	return get_character(cqi) or get_character(id)
+end
+
+local function faction_from_context_id(id)
+	local cqi = tonumber(id)
+	if not cqi then
+		return nil
+	end
+	local f = try(function() return cm:model():faction_for_command_queue_index(cqi) end, nil)
+	if f and not f:is_null_interface() then
+		return f
+	end
+	return nil
+end
+
+local function parent_of(uic)
+	return try(function()
+		local p = uic:Parent()
+		if p then
+			return UIComponent(p)
+		end
+	end, nil)
+end
+
+-- unit, its military force and faction, looked up by unit cqi (there is no direct model lookup)
+local function find_unit(cqi)
+	cqi = tonumber(cqi)
+	if not cqi then
+		return nil
+	end
+	local found_u, found_mf, found_f = nil, nil, nil
+	pcall(function()
+		local factions = cm:model():world():faction_list()
+		for i = 0, factions:num_items() - 1 do
+			local f = factions:item_at(i)
+			local forces = f:military_force_list()
+			for j = 0, forces:num_items() - 1 do
+				local mf = forces:item_at(j)
+				local units = mf:unit_list()
+				for k = 0, units:num_items() - 1 do
+					local u = units:item_at(k)
+					if u:command_queue_index() == cqi then
+						found_u, found_mf, found_f = u, mf, f
+						return
+					end
+				end
+			end
+		end
+	end)
+	return found_u, found_mf, found_f
+end
+
+local MAX_UI_PARENTS = 10
+
+-- What a clicked UI element (or one of its parents) shows: a unit card, a character or a faction.
+local function context_selection(uic, want_faction)
+	local node = uic
+	for _ = 0, MAX_UI_PARENTS do
+		if not node then
+			return nil
+		end
+		local unit_id = context_id(node, "CcoCampaignUnit")
+		if unit_id then
+			local u = find_unit(unit_id)
+			-- lords and heroes have a unit card too; for them the character context below wins
+			if u and not is_character_unit(u) then
+				return { kind = "unit", cqi = tonumber(unit_id) }
+			end
+		end
+		local char_id = context_id(node, "CcoCampaignCharacter")
+		if char_id then
+			local c = character_from_context_id(char_id)
+			if c then
+				return { kind = "character", cqi = c:command_queue_index() }
+			end
+		end
+		if want_faction then
+			local faction_id = context_id(node, "CcoCampaignFaction")
+			if faction_id then
+				local f = faction_from_context_id(faction_id)
+				if f then
+					return { kind = "faction", key = f:name() }
+				end
+			end
+		end
+		node = parent_of(node)
+	end
+	return nil
+end
+
+local last_diplomacy_faction = nil -- faction clicked while the diplomacy screen is open
+
+local function on_component_clicked(context)
+	local uic = try(function() return UIComponent(context.component) end, nil)
+	if not uic then
+		return
+	end
+	local in_diplomacy = is_panel_open("diplomacy_dropdown")
+	local sel = context_selection(uic, in_diplomacy)
+	if not sel then
+		return
+	end
+	if sel.kind == "faction" then
+		if sel.key ~= local_faction_name() then
+			last_diplomacy_faction = sel.key
+		end
+		return
+	end
+	if sel.kind == "character" then
+		local c = get_character(sel.cqi)
+		-- clicking around your own leader's panels should not replace the chosen target
+		if not c or is_player_leader(c) then
+			return
+		end
+		if in_diplomacy and c:faction():name() ~= local_faction_name() then
+			last_diplomacy_faction = c:faction():name()
+		end
+	end
+	last_selected = sel
+end
+
+-- distinct non-player factions shown anywhere inside a UI subtree
+local function collect_factions(uic, player_key, out, budget)
+	if not uic or budget.left <= 0 then
+		return
+	end
+	budget.left = budget.left - 1
+	local id = context_id(uic, "CcoCampaignFaction")
+	if id then
+		local f = faction_from_context_id(id)
+		if f and f:name() ~= player_key and not out[f:name()] then
+			out[f:name()] = f
+			out.n = out.n + 1
+		end
+	end
+	local count = try(function() return uic:ChildCount() end, 0)
+	for i = 0, count - 1 do
+		collect_factions(try(function() return UIComponent(uic:Find(i)) end, nil), player_key, out, budget)
+	end
+end
+
+-- the other faction on the diplomacy screen: the one last clicked there, or the only one shown
+local function get_diplomacy_target_faction(player_key)
+	if not is_panel_open("diplomacy_dropdown") then
+		return nil, nil
+	end
+	if last_diplomacy_faction then
+		local f = get_faction(last_diplomacy_faction)
+		if f then
+			return f, nil
+		end
+	end
+	local root = try(function() return core:get_ui_root() end, nil)
+	for _, path in ipairs({ { "diplomacy_dropdown", "faction_right_status_panel" }, { "diplomacy_dropdown" } }) do
+		local panel = try(function() return find_uicomponent(root, unpack(path)) end, nil)
+		if panel then
+			local found = { n = 0 }
+			collect_factions(panel, player_key, found, { left = 5000 })
+			if found.n == 1 then
+				for key, f in pairs(found) do
+					if key ~= "n" then
+						return f, nil
+					end
+				end
+			end
+		end
+	end
+	return nil, "diplomacy_pick_faction"
+end
+
+-- the character shown in an open character details panel (heroes included)
+local function get_details_panel_character()
+	if not is_panel_open("character_details_panel") then
+		return nil
+	end
+	local panel = try(function() return find_uicomponent(core:get_ui_root(), "character_details_panel", "character_context_parent") end, nil)
+	local id = panel and context_id(panel, "CcoCampaignCharacter")
+	return id and character_from_context_id(id) or nil
+end
+
+-- returns { character = c } or { unit = u, force = mf, faction = f, cqi = n }, source, error code
 local function resolve_target(player_faction, requested_cqi)
 	if requested_cqi then
 		local c = get_character(requested_cqi)
 		if c then
-			return c, "requested", nil
+			return { character = c }, "requested", nil
 		end
 		return nil, "requested", "target_not_found"
 	end
 
-	local dip = get_diplomacy_target_faction()
-	if dip and dip:name() ~= player_faction:name() then
+	local dip, dip_err = get_diplomacy_target_faction(player_faction:name())
+	if dip then
 		local leader = leader_of(dip)
 		if leader then
-			return leader, "diplomacy", nil
+			return { character = leader }, "diplomacy", nil
 		end
 		return nil, "diplomacy", "faction_has_no_leader"
+	end
+	if dip_err then
+		return nil, "diplomacy", dip_err
+	end
+
+	local shown = get_details_panel_character()
+	if shown and not is_player_leader(shown) then
+		return { character = shown }, "details", nil
 	end
 
 	if not last_selected then
@@ -548,7 +726,15 @@ local function resolve_target(player_faction, requested_cqi)
 		if not c then
 			return nil, "selection", "target_not_found"
 		end
-		return c, "selection", nil
+		return { character = c }, "selection", nil
+	end
+
+	if last_selected.kind == "unit" then
+		local u, mf, f = find_unit(last_selected.cqi)
+		if not u then
+			return nil, "unit", "target_not_found"
+		end
+		return { unit = u, force = mf, faction = f, cqi = last_selected.cqi }, "unit", nil
 	end
 
 	if last_selected.kind == "settlement" then
@@ -559,12 +745,53 @@ local function resolve_target(player_faction, requested_cqi)
 		end
 		local leader = leader_of(owner)
 		if leader then
-			return leader, "settlement", nil
+			return { character = leader }, "settlement", nil
 		end
 		return nil, "settlement", "faction_has_no_leader"
 	end
 
 	return nil, "none", "nothing_selected"
+end
+
+-- A rank-and-file unit as a conversation partner: one of its soldiers. The negative id keeps
+-- it apart from character ids; game actions refuse it because no character has that cqi.
+local function export_unit(target)
+	local u, mf, f, cqi = target.unit, target.force, target.faction, target.cqi
+	local key = u:unit_key()
+	local name = context_text("CcoCampaignUnit", cqi, "Name") or loc("land_units_onscreen_name_" .. key, key)
+	local t = {
+		cqi = -cqi,
+		isUnit = true,
+		unitCqi = cqi,
+		unitKey = key,
+		name = name,
+		forename = "",
+		subtypeKey = key,
+		subtypeName = name,
+		typeKey = "unit",
+		rank = 0,
+		age = 0,
+		isMale = true,
+		isFactionLeader = false,
+		isWounded = false,
+		isEmbedded = false,
+		battlesWon = 0,
+		battlesFought = 0,
+		factionKey = f:name(),
+		traits = new_array(),
+		strength = math.floor(try(function() return u:percentage_proportion_of_full_strength() end, 100) + 0.5),
+		biography = context_text("CcoCampaignUnit", cqi, "UnitRecordContext.HistoricalDescription"),
+	}
+	local general = try(function() return mf:general_character() end, nil)
+	if general and not general:is_null_interface() then
+		t.commanderCqi = general:command_queue_index()
+		t.commanderName = character_name(general)
+		if try(function() return general:has_region() end, false) then
+			t.regionKey = general:region():name()
+			t.regionName = region_name(t.regionKey)
+		end
+	end
+	return t
 end
 
 -- One id per campaign: created the first time the mod runs in it, then kept in the save,
@@ -608,17 +835,22 @@ local function build_state(req_id, requested_cqi)
 		state.error = err
 		return state
 	end
-	if target:command_queue_index() == player_char:command_queue_index() then
-		state.error = "target_is_player"
-		return state
+	local target_faction
+	if target.character then
+		if target.character:command_queue_index() == player_char:command_queue_index() then
+			state.error = "target_is_player"
+			return state
+		end
+		target_faction = target.character:faction()
+	else
+		target_faction = target.faction
 	end
 
-	local target_faction = target:faction()
 	state.turn = try(function() return cm:turn_number() end, 0)
 	state.campaign = try(function() return cm:get_campaign_name() end, "")
 	state.campaignId = try(get_campaign_id, nil)
 	state.player = export_character(player_char)
-	state.target = export_character(target)
+	state.target = target.character and export_character(target.character) or export_unit(target)
 	state.playerFaction = export_faction(player_faction, nil)
 	if target_faction:name() ~= player_faction:name() then
 		state.targetFaction = export_faction(target_faction, player_faction)
@@ -973,6 +1205,28 @@ function votc_wh3()
 		true
 	)
 
+	-- hero and unit cards, portraits, character panels and the diplomacy faction list do not
+	-- raise CharacterSelected; read what was clicked from the UI context instead
+	core:add_listener(
+		"votc_component_clicked",
+		"ComponentLClickUp",
+		true,
+		function(context)
+			pcall(on_component_clicked, context)
+		end,
+		true
+	)
+
+	core:add_listener(
+		"votc_diplomacy_opened",
+		"PanelOpenedCampaign",
+		function(context) return context.string == "diplomacy_dropdown" end,
+		function()
+			last_diplomacy_faction = nil
+		end,
+		true
+	)
+
 	core:add_listener(
 		"votc_settlement_selected",
 		"SettlementSelected",
@@ -1007,6 +1261,8 @@ votc_wh3_internal = {
 	load_commands = load_commands,
 	clean_text = clean_text,
 	set_last_selected = function(v) last_selected = v end,
+	get_last_selected = function() return last_selected end,
+	get_last_diplomacy_faction = function() return last_diplomacy_faction end,
 	get_last_processed_id = function() return last_processed_id end,
 	ALLOWED_TRAITS = ALLOWED_TRAITS,
 	FILES = { state = STATE_FILE, cmd = CMD_FILE, ack = ACK_FILE },

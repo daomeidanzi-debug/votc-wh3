@@ -3,6 +3,7 @@
 
 module.exports = {
   signature: "noOp",
+  allowUnits: true,
   title: {
     en: "No executed actions fallback",
     ru: "Отсутствие выполненных действий",
