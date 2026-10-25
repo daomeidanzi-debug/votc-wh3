@@ -1275,6 +1275,10 @@ app.on('ready', async () => {
     // game must keep focus until it has answered the export request. Show the window
     // without activating it, and take focus only once the game data has arrived.
     const window = chatWindow;
+    if (window.isFocused()) {
+      // hand focus back to the window below (normally the game) so its scripts run
+      window.blur();
+    }
     window.showInactive();
     window.webContents.send('chat-reset'); // This will trigger showChat in App.tsx
     const focusChat = () => {

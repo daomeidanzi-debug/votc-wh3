@@ -158,6 +158,19 @@ function pickArgs(argDefs) {
     check(/点选/.test(describeExportError('nothing_selected', 'zh')), 'readable zh error');
   });
 
+  await section('conversation started from a settlement', async () => {
+    const cityState = fixture('state_settlement.json');
+    const gd = buildGameDataFromWh3(cityState, 'zh');
+    check(cityState.sceneRegionName === '黑岩堡' && gd.location === '黑岩堡', 'location is the clicked settlement: ' + gd.location);
+    check(gd.scene.includes('黑岩堡') && /capital/.test(gd.scene), 'scene names the settlement and that it is their capital: ' + gd.scene);
+    const sandbox = { module: { exports: {} }, exports: {}, console };
+    vm.runInContext(fs.readFileSync(path.join(PROMPTS_DIR, 'character_description/standard/pListMccTest2_ZH.js'), 'utf-8'), vm.createContext(sandbox));
+    const text = sandbox.module.exports(gd, gd.aiID);
+    check(text.includes('在黑岩堡城中的会面') && text.includes('地点（黑岩堡'), 'Chinese persona places the meeting in the settlement');
+    const foreign = buildGameDataFromWh3(foreignState, 'zh');
+    check(foreign.location === foreignState.target.regionName, 'other conversations still use where the target stands');
+  });
+
   await section('talking to a rank-and-file unit', async () => {
     const unitState = fixture('state_enemy_unit.json');
     const gd = buildGameDataFromWh3(unitState, 'zh');
@@ -448,6 +461,19 @@ function pickArgs(argDefs) {
     let timedOut = false;
     try { await bridge.requestExport(undefined, 400); } catch (e) { timedOut = e.code === 'timeout'; }
     check(timedOut, 'export times out with code "timeout" when the game is not running');
+
+    // game in the background: keep waiting past the deadline, answer arrives later
+    const late = setTimeout(() => {
+      const raw = fs.readFileSync(path.join(GAME_DIR, 'votc_commands.lua'), 'utf-8');
+      const reqId = (raw.match(/reqId = "([^"]+)"/) || [])[1];
+      fs.writeFileSync(path.join(GAME_DIR, 'votc_state.json'), JSON.stringify({ ...foreignState, reqId }));
+    }, 1200);
+    let waited = null;
+    try { waited = await bridge.requestExport(undefined, 300, () => true); } catch (e) { waited = e; }
+    clearTimeout(late);
+    check(waited && waited.ok === true, 'export keeps waiting while the game is in the background');
+    const diag = fs.readFileSync(path.join(GAME_DIR, 'votc_app_log.txt'), 'utf-8');
+    check(/export #\d+ requested/.test(diag) && /timed out/.test(diag) && /answered after \d+ ms: ok/.test(diag) && /result kill #\d+: FAILED nope/.test(diag), 'diagnostic log records exports and command results');
     bridge.dispose();
   });
 

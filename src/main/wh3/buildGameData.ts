@@ -135,6 +135,11 @@ export function describeScene(state: Wh3State): string {
     case 'diplomacy':
       return 'a diplomatic audience between the two factions';
     case 'settlement':
+      if (state.sceneRegionName) {
+        const owner = state.sceneRegionOwnerName ? `, held by ${state.sceneRegionOwnerName}` : '';
+        const capital = state.sceneIsCapital ? ' (their capital)' : '';
+        return `an audience in the settlement of ${state.sceneRegionName}${capital}${owner}`;
+      }
       return 'a meeting about a settlement';
     case 'unit':
       return 'a word with a common soldier in the ranks';
@@ -163,8 +168,11 @@ export function buildGameDataFromWh3(state: Wh3State, lang: string): GameData {
   gd.date = lang === 'zh' ? `第 ${turn} 回合` : `Turn ${turn}`;
   gd.totalDays = turn;
   gd.scene = describeScene(state);
-  gd.location = state.target.regionName ?? '';
-  gd.locationController = state.target.regionOwnerName ?? '';
+  // a settlement conversation happens in that settlement; otherwise where the target stands
+  gd.location = state.sceneRegionName ?? state.target.regionName ?? '';
+  gd.locationController = state.sceneRegionName
+    ? state.sceneRegionOwnerName ?? ''
+    : state.target.regionOwnerName ?? '';
 
   const player = toCharacter(state.player, playerFaction, state.player, true, lang);
   const target = toCharacter(state.target, targetFaction, state.player, false, lang);

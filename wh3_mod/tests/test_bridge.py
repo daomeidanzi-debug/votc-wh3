@@ -334,19 +334,42 @@ def main():
     poll(L)
     check(len(calls(L)) == n_before, 'already processed ids are not executed again')
 
-    print('stale commands')
+    print('timestamps far from the game clock still run (os.time drifts in game)')
     write_cmds('return { cmds = { { id = 30, ts = %d, op = "treasury_mod" }, { id = 31, ts = %d, op = "transfer_gold", from = "wh_main_emp_empire", to = "wh_main_grn_greenskins", amount = 1 } } }' % (now, now - 7200))
     poll(L)
     res = {r['id']: r for r in ack()['results']}
-    check(res[31]['ok'] is False and 'stale' in res[31]['message'], 'old command ignored as stale')
+    check(res[31]['ok'] is True, 'command with an old timestamp executed')
+    check(res[30]['ok'] is False and 'unknown op' in res[30]['message'], 'unknown op still rejected')
+
+    print('export never fails silently')
+    L.execute('karl.faction = function() error("boom from the game") end')
+    L.execute('mock.listeners["CharacterSelected"]({ character = function() return grim end })')
+    write_cmds('return { cmds = { { id = 32, ts = %d, op = "export", reqId = "boom" } } }' % now)
+    poll(L)
+    st = json.load(open('votc_state.json', encoding='utf-8'))
+    check(st['reqId'] == 'boom' and st['ok'] is False and 'internal' in st['error'] and 'boom' in st['error'], 'script error during export is reported: %s' % st.get('error'))
+    L.execute('karl.faction = function() return player end')
+    check(os.path.exists('votc_log.txt') and 'export error' in open('votc_log.txt', encoding='utf-8').read(), 'mod writes its own votc_log.txt')
+
+    print('settlement conversation takes place in that settlement')
+    L.execute(r'''
+        mock.loc["regions_onscreen_iron_rock"] = "铁岩"
+        iron_rock = mock.add_region("iron_rock", orcs)
+        mock.listeners["SettlementSelected"]({ garrison_residence = function() return { region = function() return iron_rock end } end })
+    ''')
+    write_cmds('return { cmds = { { id = 33, ts = %d, op = "export", reqId = "city" } } }' % now)
+    poll(L)
+    st = json.load(open('votc_state.json', encoding='utf-8'))
+    check(st['ok'] and st['sceneRegionKey'] == 'iron_rock' and st['sceneRegionName'] == '铁岩', 'scene region is the clicked settlement: %s' % st.get('sceneRegionName'))
+    check(st['sceneIsCapital'] is False and st['target']['cqi'] == 2, 'not the capital; talking to its owner')
 
     print('sandboxing and malformed files')
     write_cmds('return { cmds = { { id = 40, ts = %d, op = "export", reqId = tostring(io) } } }' % now)
     poll(L)
-    check(ack()['lastId'] == 31, 'command file cannot call globals (eval error, nothing run)')
+    check(ack()['lastId'] == 33, 'command file cannot call globals (eval error, nothing run)')
     write_cmds('return { cmds = { { id = 41, ts = %d, op = "exp')
     poll(L)
-    check(ack()['lastId'] == 31, 'truncated file is ignored')
+    check(ack()['lastId'] == 33, 'truncated file is ignored')
     write_cmds('return { cmds = { { id = 41, ts = %d, op = "export", reqId = "r41" } } }' % now)
     poll(L)
     check(ack()['lastId'] == 41, 'complete file processed after truncated one')
@@ -397,6 +420,7 @@ def make_fixtures(out_dir):
         ('state_foreign.json', 'mock.listeners["CharacterSelected"]({ character = function() return grim end })'),
         ('state_own_hero.json', 'mock.listeners["CharacterSelected"]({ character = function() return hero end })'),
         ('state_enemy_unit.json', 'mock.click(mock.ui_component({ CcoCampaignUnit = tostring(grim._units[2]:command_queue_index()) }))'),
+        ('state_settlement.json', 'mock.loc["regions_onscreen_black_crag"] = "黑岩堡"; mock.listeners["SettlementSelected"]({ garrison_residence = function() return { region = function() return badlands end } end })'),
     )
     for name, select in selectors:
         L = fresh(tempfile.mkdtemp(prefix='votc_fx_'))

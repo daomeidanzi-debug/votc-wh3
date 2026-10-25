@@ -115,6 +115,11 @@ export interface Wh3State {
   playerFaction?: Wh3Faction;
   /** missing when the target belongs to the player's own faction */
   targetFaction?: Wh3Faction;
+  /** set when the conversation was started from a settlement: where the meeting takes place */
+  sceneRegionKey?: string;
+  sceneRegionName?: string;
+  sceneRegionOwnerName?: string;
+  sceneIsCapital?: boolean;
 }
 
 export interface Wh3CommandResult {
@@ -154,6 +159,8 @@ export const WH3_FILES = {
   state: 'votc_state.json',
   commands: 'votc_commands.lua',
   ack: 'votc_ack.json',
+  /** app-side diagnostic log (the mod writes votc_log.txt) */
+  appLog: 'votc_app_log.txt',
 } as const;
 
 export const WH3_EXE_NAME = 'Warhammer3.exe';

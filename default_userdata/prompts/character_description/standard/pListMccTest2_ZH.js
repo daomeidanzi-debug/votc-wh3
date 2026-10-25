@@ -98,7 +98,8 @@ const VOICES = {
 function sceneZh(gameData) {
     const src = gameData.wh3 ? gameData.wh3.targetSource : "";
     if (src === "diplomacy") return "两派系之间的外交会晤";
-    if (src === "settlement") return "关于一座定居点的会面";
+    if (src === "settlement") return gameData.location ? `在${gameData.location}城中的会面` : "关于一座定居点的会面";
+    if (src === "unit") return "和军中一名普通士兵的交谈";
     if (gameData.wh3 && gameData.wh3.sameFaction) return "与玩家麾下将领的私下议事";
     return "战役地图上的会谈";
 }

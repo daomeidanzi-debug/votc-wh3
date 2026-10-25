@@ -13,6 +13,7 @@ import type { ILLMCompletionResponse, ILLMMessage, ConnectionTestSubResult, LLMP
 import { settingsRepository } from "../SettingsRepository";
 import { resolveI18nString } from "./i18nUtils";
 import { ActionSandbox } from "./ActionSandbox";
+import { wh3Bridge } from "../wh3/Wh3Bridge";
 
 export interface ActionEvaluationResult {
   autoApproved: ActionExecutionResult[];
@@ -173,6 +174,7 @@ export class ActionEngine {
       const content = (result && typeof result === "object") ? result.content : null;
       console.log('[DEBUG] ActionEngine: Received LLM response', content);
       if (!content || typeof content !== "string") {
+        this.reportProblem(conv, 'empty', 'The model returned an empty answer when choosing game actions.');
         return { autoApproved: [], needsApproval: [] };
       }
 
@@ -189,12 +191,14 @@ export class ActionEngine {
         const maybeJson = healJsonResponseWithLogging(content, "ActionEngine");
         
         if (!maybeJson) {
+          this.reportProblem(conv, 'json', `The model did not answer in the required JSON format: "${content.slice(0, 120)}"`);
           return { autoApproved: [], needsApproval: [] };
         }
-        
+
         const validated = zodSchema.parse(maybeJson);
         parsed = validated;
       } catch (err) {
+        this.reportProblem(conv, 'schema', `The model's action choice did not match the action list: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`);
         return { autoApproved: [], needsApproval: [] };
       }
 
@@ -291,10 +295,37 @@ export class ActionEngine {
         console.log('[DEBUG] ActionEngine: Caught abort signal in error handler');
         return { autoApproved: [], needsApproval: [] };
       }
-      // silent guard: action engine should never crash the conversation loop
+      // guard: action engine should never crash the conversation loop
       console.error("ActionEngine error:", err);
+      this.reportProblem(conv, 'request', `Choosing game actions failed: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`);
       return { autoApproved: [], needsApproval: [] };
     }
+  }
+
+  /** Conversations already told about a given kind of action problem (shown once each). */
+  private static reported = new WeakMap<Conversation, Set<string>>();
+
+  /**
+   * Tell the player in the chat why no game action happened, instead of failing silently.
+   * Typical cause: the selected model does not support structured (JSON schema) output.
+   */
+  private static reportProblem(conv: Conversation, kind: string, detail: string): void {
+    console.warn(`[ActionEngine] ${kind}: ${detail}`);
+    wh3Bridge.diagnostic(`actions ${kind}: ${detail}`);
+    let seen = this.reported.get(conv);
+    if (!seen) {
+      seen = new Set();
+      this.reported.set(conv, seen);
+    }
+    if (seen.has(kind)) return;
+    seen.add(kind);
+    const zh = settingsRepository.getLanguage() === 'zh';
+    conv.addSystemError(
+      zh ? '游戏动作没有执行' : 'Game actions were skipped',
+      (zh
+        ? '判断要执行哪些游戏动作时出错。常见原因：当前模型不支持“结构化输出（JSON Schema）”。可以在设置里点“测试连接”查看动作是否可用，或换一个支持的模型（如 deepseek-chat、OpenRouter 上的 GPT/Claude/Gemini）。详情：'
+        : 'Choosing game actions failed. A common cause is a model without structured (JSON schema) output. Run the connection test in settings, or switch to a model that supports it. Details: ') + detail
+    );
   }
 
   /**

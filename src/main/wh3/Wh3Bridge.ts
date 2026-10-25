@@ -16,6 +16,9 @@ const ACK_POLL_MS = 400;
  * Keep in sync with STALE_COMMAND_SECONDS in votc_wh3.lua.
  */
 const PENDING_TTL_MS = 60 * 60 * 1000;
+/** How long an export may wait while the game is not the foreground window. */
+const MAX_BACKGROUND_WAIT_MS = 3 * 60 * 1000;
+const DIAGNOSTIC_MAX_BYTES = 256 * 1024;
 
 type PendingCommand = Record<string, LuaValue> & { id: number; ts: number; op: string };
 
@@ -86,6 +89,7 @@ export class Wh3Bridge extends EventEmitter {
     this.writeCommandFile();
     this.ensureAckWatcher();
     console.log(`Wh3Bridge: queued ${cmd.op} #${cmd.id}`);
+    if (cmd.op !== 'export') this.diagnostic(`queued ${cmd.op} #${cmd.id} ${JSON.stringify(command)}`);
     return cmd.id;
   }
 
@@ -145,6 +149,7 @@ export class Wh3Bridge extends EventEmitter {
           const result: Wh3CommandResult = results.find((r) => r.id === p.cmd.id)
             ?? { id: p.cmd.id, op: p.cmd.op, ok: true, message: 'acknowledged' };
           this.emit('result', result);
+          if (p.cmd.op !== 'export') this.diagnostic(`result ${result.op} #${result.id}: ${result.ok ? 'ok' : 'FAILED'} ${result.message}`);
           if (!result.ok) {
             console.warn(`Wh3Bridge: ${result.op} #${result.id} failed in game: ${result.message}`);
             if (p.cmd.op !== 'export') this.emit('command-failed', result);
@@ -164,7 +169,15 @@ export class Wh3Bridge extends EventEmitter {
    * Ask the game for a snapshot of the player and the current talk target.
    * Resolves with the state even when state.ok is false (caller decides how to report it).
    */
-  async requestExport(targetCqi?: number, timeoutMs = EXPORT_TIMEOUT_MS): Promise<Wh3State> {
+  /**
+   * @param gameInBackground when it returns true the deadline is extended (up to
+   *        MAX_BACKGROUND_WAIT_MS): the game only answers once it is in front again.
+   */
+  async requestExport(
+    targetCqi?: number,
+    timeoutMs = EXPORT_TIMEOUT_MS,
+    gameInBackground: () => boolean = () => false
+  ): Promise<Wh3State> {
     if (!this.isAvailable()) {
       throw new Wh3BridgeError('no_game_dir', 'Warhammer III folder is not configured or does not exist');
     }
@@ -172,19 +185,28 @@ export class Wh3Bridge extends EventEmitter {
     const command: Wh3Command = targetCqi != null ? { op: 'export', reqId, targetCqi } : { op: 'export', reqId };
     const id = this.queueCommand(command);
     const started = Date.now();
+    let deadline = started + timeoutMs;
+    this.diagnostic(`export #${id} requested`);
 
     return new Promise<Wh3State>((resolve, reject) => {
       const timer = setInterval(() => {
         const state = this.readJson<Wh3State>(WH3_FILES.state);
         if (state && state.reqId === reqId) {
           clearInterval(timer);
+          this.diagnostic(`export #${id} answered after ${Date.now() - started} ms: ${state.ok ? 'ok' : 'error ' + state.error}`);
           resolve(state);
           return;
         }
-        if (Date.now() - started > timeoutMs) {
+        const now = Date.now();
+        if (now > deadline && gameInBackground() && now - started < MAX_BACKGROUND_WAIT_MS) {
+          // keep waiting while the player is outside the game
+          deadline = now + POLL_MS * 4;
+        }
+        if (now > deadline) {
           clearInterval(timer);
           this.pending = this.pending.filter((p) => p.cmd.id !== id);
           try { this.writeCommandFile(); } catch { /* ignore */ }
+          this.diagnostic(`export #${id} timed out after ${now - started} ms`);
           reject(new Wh3BridgeError(
             'timeout',
             'The game did not answer. Make sure Warhammer III is running a single-player campaign with the votc_wh3 mod enabled, the campaign map is loaded, and the game window is in front when you press the hotkey (the game pauses its scripts in the background). Click the retry button to try again.'
@@ -192,6 +214,23 @@ export class Wh3Bridge extends EventEmitter {
         }
       }, POLL_MS);
     });
+  }
+
+  /**
+   * Append a line to votc_app_log.txt in the game folder (next to the mod's votc_log.txt),
+   * so problems can be diagnosed from one place. Kept small; never throws.
+   */
+  diagnostic(message: string): void {
+    try {
+      const file = this.filePath(WH3_FILES.appLog);
+      try {
+        if (fs.statSync(file).size > DIAGNOSTIC_MAX_BYTES) {
+          const text = fs.readFileSync(file, 'utf-8');
+          fs.writeFileSync(file, text.slice(text.length / 2), 'utf-8');
+        }
+      } catch { /* missing file */ }
+      fs.appendFileSync(file, `${new Date().toISOString()} ${message}\n`, 'utf-8');
+    } catch { /* diagnostics must never break the app */ }
   }
 
   dispose(): void {

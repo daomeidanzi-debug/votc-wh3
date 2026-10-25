@@ -11,6 +11,7 @@ import { EventEmitter } from "events";
 import { wh3Bridge, Wh3BridgeError } from "../wh3/Wh3Bridge";
 import { buildGameDataFromWh3, describeExportError } from "../wh3/buildGameData";
 import { applyBackstories } from "../wh3/backstories";
+import { focusMonitor } from "../FocusMonitor";
 import { VOTC_BACKSTORIES_DIR } from "../utils/paths";
 import { shell } from "electron";
 import { TokenCounter, initializationService } from "../utils";
@@ -111,7 +112,8 @@ export class Conversation {
             // Drop anything left over from a previous conversation before asking for fresh state
             wh3Bridge.clear();
             const lang = settingsRepository.getLanguage();
-            const state = await wh3Bridge.requestExport();
+            // the game answers only while it is the foreground window; wait as long as it is not
+            const state = await wh3Bridge.requestExport(undefined, undefined, () => !focusMonitor.isGameFocused());
             if (!state.ok) {
                 console.warn('Conversation.initializeGameData: export failed:', state.error);
                 this.isActive = false;

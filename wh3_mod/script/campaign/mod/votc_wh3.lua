@@ -19,15 +19,12 @@
 -- is loaded with an empty environment, so it can only carry data.
 --------------------------------------------------------------------------------
 
-local VOTC_VERSION = "1.3.0"
+local VOTC_VERSION = "1.4.0"
 
 local STATE_FILE = "votc_state.json"
 local CMD_FILE = "votc_commands.lua"
 local ACK_FILE = "votc_ack.json"
 local POLL_INTERVAL_MS = 400
--- the game only polls while it has focus, so actions chosen during a long chat wait for the
--- player to return; only commands older than this (e.g. left over from a crash) are dropped
-local STALE_COMMAND_SECONDS = 3600
 local MAX_UNITS_PER_ARMY = 20
 
 -- Traits that exist for every culture (no culture restriction in character_traits).
@@ -57,8 +54,37 @@ local started = false
 -- utils
 --------------------------------------------------------------------------------
 
+local LOG_FILE = "votc_log.txt"
+local LOG_MAX_BYTES = 256 * 1024
+
+-- our own log next to the bridge files (lua_mod_log.txt is not always written)
+local function append_log(line)
+	pcall(function()
+		local f = io.open(LOG_FILE, "rb")
+		if f then
+			local size = f:seek("end")
+			f:close()
+			if size and size > LOG_MAX_BYTES then
+				local old = io.open(LOG_FILE, "rb")
+				local text = old:read("*a")
+				old:close()
+				local keep = io.open(LOG_FILE, "wb")
+				keep:write(text:sub(-math.floor(LOG_MAX_BYTES / 2)))
+				keep:close()
+			end
+		end
+		local out_file = io.open(LOG_FILE, "ab")
+		if out_file then
+			local stamp = (os and os.date) and os.date("%Y-%m-%d %H:%M:%S") or "?"
+			out_file:write(stamp .. " " .. line .. "\n")
+			out_file:close()
+		end
+	end)
+end
+
 local function log(msg)
 	msg = "[VOTC] " .. tostring(msg)
+	append_log(msg)
 	if type(ModLog) == "function" then
 		pcall(ModLog, msg)
 	elseif type(out) == "function" then
@@ -745,7 +771,8 @@ local function resolve_target(player_faction, requested_cqi)
 		end
 		local leader = leader_of(owner)
 		if leader then
-			return { character = leader }, "settlement", nil
+			-- the meeting takes place in the clicked settlement, not where the leader stands
+			return { character = leader, sceneRegion = region }, "settlement", nil
 		end
 		return nil, "settlement", "faction_has_no_leader"
 	end
@@ -851,6 +878,18 @@ local function build_state(req_id, requested_cqi)
 	state.campaignId = try(get_campaign_id, nil)
 	state.player = export_character(player_char)
 	state.target = target.character and export_character(target.character) or export_unit(target)
+	if target.sceneRegion then
+		local r = target.sceneRegion
+		state.sceneRegionKey = r:name()
+		state.sceneRegionName = region_name(r:name())
+		local owner = try(function() return r:owning_faction() end, nil)
+		if owner and not owner:is_null_interface() then
+			state.sceneRegionOwnerName = faction_name(owner)
+		end
+		state.sceneIsCapital = try(function()
+			return owner:has_home_region() and owner:home_region():name() == r:name()
+		end, false)
+	end
 	state.playerFaction = export_faction(player_faction, nil)
 	if target_faction:name() ~= player_faction:name() then
 		state.targetFaction = export_faction(target_faction, player_faction)
@@ -914,7 +953,13 @@ end
 local EXECUTORS = {}
 
 EXECUTORS.export = function(cmd)
-	local state = build_state(cmd.reqId, cmd.targetCqi)
+	-- always answer: a script error while reading the game must reach the player as a
+	-- message, not as "the game did not answer"
+	local ok, state = pcall(build_state, cmd.reqId, cmd.targetCqi)
+	if not ok then
+		log("export error: " .. tostring(state))
+		state = { version = VOTC_VERSION, reqId = cmd.reqId, ok = false, error = "internal: " .. tostring(state), time = now_seconds() }
+	end
 	if not write_file(STATE_FILE, json_encode(state)) then
 		error("could not write state file", 0)
 	end
@@ -1147,16 +1192,13 @@ function votc_poll_commands()
 	last_cmd_raw = raw
 
 	local results = new_array()
-	local now = now_seconds()
 	for _, cmd in ipairs(data.cmds) do
 		if type(cmd) == "table" and type(cmd.id) == "number" and cmd.id > last_processed_id then
 			last_processed_id = cmd.id
 			local ok, message
-			if now and type(cmd.ts) == "number" and math.abs(now - cmd.ts) > STALE_COMMAND_SECONDS then
-				ok, message = false, "stale command ignored"
-			else
-				ok, message = execute_command(cmd)
-			end
+			-- no age check: the game's os.time() drifts from the real clock, and replays are
+			-- already prevented by last_processed_id (the app also clears the file on start)
+			ok, message = execute_command(cmd)
 			log("cmd " .. string.format("%.0f", cmd.id) .. " " .. tostring(cmd.op) .. ": " .. (ok and "ok" or "FAILED") .. " - " .. message)
 			results[#results + 1] = { id = cmd.id, op = tostring(cmd.op), ok = ok, message = message }
 		end
