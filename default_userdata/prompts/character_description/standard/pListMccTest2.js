@@ -9,9 +9,11 @@ module.exports = (gameData, currentCharacterId) => {
 
     let output = "";
     output += `[${current.shortName}'s Persona: ${buildCharacterItems(current, gameData).join("; ")}]\n`;
+    output += buildLore(current);
     gameData.characters.forEach((char) => {
         if (char.id !== current.id) {
             output += `[${char.shortName}'s Persona: ${buildCharacterItems(char, gameData).join("; ")}]\n`;
+            output += buildLore(char);
         }
     });
 
@@ -27,6 +29,25 @@ module.exports = (gameData, currentCharacterId) => {
     }
     return output;
 };
+
+// Longest piece of game lore put into the prompt per character
+const MAX_LORE_CHARS = 2000;
+
+function clip(text) {
+    return text.length > MAX_LORE_CHARS ? text.slice(0, MAX_LORE_CHARS) + "…" : text;
+}
+
+// Backstory written by the player (authoritative), then game lore for the character and its kind.
+function buildLore(char) {
+    const w = char.wh3;
+    if (!w) return "";
+    let out = "";
+    if (w.backstory) out += `[${char.shortName}'s backstory (written by the player; this is true and overrides other lore): ${clip(w.backstory)}]\n`;
+    if (w.character.biography) out += `[${char.shortName}'s history (game lore): ${clip(w.character.biography)}]\n`;
+    if (w.character.typeDescription) out += `[What ${char.shortName} is (game lore): ${clip(w.character.typeDescription)}]\n`;
+    if (w.factionBackstory) out += `[Lore of ${w.faction.name} (written by the player): ${clip(w.factionBackstory)}]\n`;
+    return out;
+}
 
 const TYPE_LABELS = {
     general: "lord",

@@ -195,6 +195,59 @@ function pickArgs(argDefs) {
     check(!(listed || []).some((s) => s.characterId === '_campaign'), 'campaign info file not listed as a character');
   });
 
+  await section('backstories and game lore', () => {
+    const { applyBackstories, ensureBackstoriesDir, MAX_BACKSTORY_CHARS } = load('wh3/backstories.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'votc_lore_'));
+    ensureBackstoriesDir(dir);
+    check(fs.existsSync(path.join(dir, 'README.txt')), 'README created');
+    fs.writeFileSync(path.join(dir, 'README.txt'), 'my notes');
+    ensureBackstoriesDir(dir);
+    check(fs.readFileSync(path.join(dir, 'README.txt'), 'utf-8') === 'my notes', 'README never overwritten');
+
+    const cid = foreignState.campaignId;
+    // subtype file and name file both exist: the name file wins (checked first)
+    fs.writeFileSync(path.join(dir, 'wh_main_grn_orc_warboss.txt'), '所有军阀都恨矮人。');
+    fs.writeFileSync(path.join(dir, '格里姆格 铁皮.txt'), '﻿  格里姆格曾在黑火隘口惨败。 \n');
+    fs.writeFileSync(path.join(dir, 'wh_main_grn_greenskins.txt'), '铁牙部落以黑岩堡为家。');
+    let gd = buildGameDataFromWh3(foreignState, 'zh');
+    applyBackstories(gd, dir);
+    const grim = gd.characters.get(2).wh3;
+    check(grim.backstory === '格里姆格曾在黑火隘口惨败。', 'name file used, BOM and whitespace trimmed: ' + grim.backstory);
+    check(grim.factionBackstory === '铁牙部落以黑岩堡为家。', 'faction file attached');
+    check(gd.characters.get(1).wh3.backstory === undefined, 'player without files has no backstory');
+
+    // campaign-specific file beats everything
+    fs.mkdirSync(path.join(dir, cid));
+    fs.writeFileSync(path.join(dir, cid, '2.txt'), 'x'.repeat(MAX_BACKSTORY_CHARS + 50));
+    gd = buildGameDataFromWh3(foreignState, 'zh');
+    applyBackstories(gd, dir);
+    const b = gd.characters.get(2).wh3.backstory;
+    check(b.startsWith('xxx') && b.length === MAX_BACKSTORY_CHARS + 1, 'campaign file wins and is capped');
+
+    // without name/campaign files the subtype file is used
+    fs.rmSync(path.join(dir, cid), { recursive: true });
+    // emptied rather than deleted: some sandboxes silently ignore deleting non-ASCII names
+    fs.writeFileSync(path.join(dir, '格里姆格 铁皮.txt'), '   ');
+    gd = buildGameDataFromWh3(foreignState, 'zh');
+    applyBackstories(gd, dir);
+    check(gd.characters.get(2).wh3.backstory === '所有军阀都恨矮人。', 'subtype file used as fallback');
+    applyBackstories(gd, path.join(dir, 'missing'));
+    check(true, 'missing folder is ignored');
+
+    for (const [rel, words] of [
+      ['character_description/standard/pListMccTest2.js', ['backstory (written by the player', 'history (game lore): 格里姆格·铁皮是最强大的黑兽人。', 'What 格里姆格 is (game lore): Orc Warbosses rule through brute force.', 'Lore of 格里姆格的"铁牙"部落']],
+      ['character_description/standard/pListMccTest2_ZH.js', ['背景故事（玩家设定', '经历（游戏设定）：格里姆格·铁皮是最强大的黑兽人。', '是什么样的角色（游戏设定）', '的背景（玩家设定）：铁牙部落']],
+    ]) {
+      const sandbox = { module: { exports: {} }, exports: {}, console };
+      vm.runInContext(fs.readFileSync(path.join(PROMPTS_DIR, rel), 'utf-8'), vm.createContext(sandbox));
+      const text = sandbox.module.exports(gd, gd.aiID);
+      check(words.every((w) => text.includes(w)), `${rel} includes backstory, biography, type and faction lore`);
+      check(!/undefined|NaN/.test(text), `${rel} still renders cleanly`);
+    }
+    const hbs = fs.readFileSync(path.join(PROMPTS_DIR, 'system', 'default.hbs'), 'utf-8');
+    check(/written by the player is true/.test(hbs), 'system prompt tells the AI to trust player backstories');
+  });
+
   await section('trait tables in sync with the Lua bridge', () => {
     const lua = fs.readFileSync(path.join(REPO, 'wh3_mod', 'script', 'campaign', 'mod', 'votc_wh3.lua'), 'utf-8');
     const block = lua.slice(lua.indexOf('local ALLOWED_TRAITS'), lua.indexOf('}', lua.indexOf('local ALLOWED_TRAITS')));

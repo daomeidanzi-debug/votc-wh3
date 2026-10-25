@@ -39,6 +39,10 @@ export interface Wh3Character {
   /** keys from the bridge's ALLOWED_TRAITS that the character has */
   traits: string[];
   army?: Wh3Army;
+  /** game text describing this kind of character (agent subtype), in the game's language */
+  typeDescription?: string;
+  /** historical description of the character's unit; a full biography for legendary lords */
+  biography?: string;
 }
 
 export interface Wh3FactionRef {

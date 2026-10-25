@@ -43,7 +43,11 @@ def fresh(workdir):
         altdorf = mock.add_region("altdorf", player)
         badlands = mock.add_region("black_crag", orcs)
         karl = mock.add_character(1, player, { forename = "names_name_karl", leader = true, army = true, units = { "wh_main_emp_inf_swordsmen", "wh_main_emp_inf_swordsmen" }, region = altdorf })
-        grim = mock.add_character(2, orcs, { forename = "names_name_grimgor", surname = "names_name_iron", leader = true, army = true, units = { "wh_main_grn_inf_orc_boyz" }, region = badlands })
+        grim = mock.add_character(2, orcs, { forename = "names_name_grimgor", surname = "names_name_iron", subtype = "wh_main_grn_orc_warboss", leader = true, army = true, units = { "wh_main_grn_inf_orc_boyz" }, region = badlands })
+        mock.cco_values.CcoAgentSubtypeRecord["wh_main_grn_orc_warboss"] = {
+            DescriptionTextOverride = "Orc Warbosses rule through [[col:red]]brute force[[/col]].",
+            ["AssociatedUnitOverride.HistoricalDescription"] = "格里姆格·铁皮是最强大的黑兽人。",
+        }
         hero = mock.add_character(3, player, { forename = "", subtype = "wh_main_emp_captain", type = "champion" })
     ''')
     L.globals().votc_wh3()
@@ -126,6 +130,35 @@ def main():
     L_new.globals().votc_wh3()
     new_id = L_new.eval('mock.saved_values.votc_campaign_id')
     check(isinstance(new_id, str) and new_id != cid, 'new campaign gets a different id at startup: %r' % new_id)
+
+    print('lore from the game database (vanilla and mod characters)')
+    L.execute(r'''
+        mock.cco_values.CcoAgentSubtypeRecord["wh_main_grn_orc_warboss"] = {
+            DescriptionTextOverride = "Orc Warbosses rule through [[col:red]]brute force[[/col]].",
+            ["AssociatedUnitOverride.HistoricalDescription"] = "格里姆格·铁皮是最强大的黑兽人。",
+        }
+        mock.cco_values.CcoAgentSubtypeRecord["my_mod_lord"] = {
+            DescriptionTextOverride = "A lord added by another mod.",
+            ["AssociatedUnitOverride.HistoricalDescription"] = string.rep("长", 2000),
+        }
+        mock.loc["agent_subtypes_description_text_override_wh_main_emp_captain"] = "Captains lead the Empire's soldiers."
+        modlord = mock.add_character(4, orcs, { forename = "names_name_grimgor", subtype = "my_mod_lord" })
+    ''')
+    L.execute('mock.listeners["CharacterSelected"]({ character = function() return grim end })')
+    write_cmds('return { cmds = { { id = 2.6, ts = %d, op = "export", reqId = "lore1" } } }' % now)
+    poll(L)
+    st = json.load(open('votc_state.json', encoding='utf-8'))
+    check(st['target']['typeDescription'] == 'Orc Warbosses rule through brute force.', 'type description read via cco, markup stripped')
+    check(st['target']['biography'] == '格里姆格·铁皮是最强大的黑兽人。', 'biography read via cco')
+    check('biography' not in st['player'] and 'typeDescription' not in st['player'], 'no lore -> fields omitted')
+    L.execute('mock.listeners["CharacterSelected"]({ character = function() return modlord end })')
+    write_cmds('return { cmds = { { id = 2.7, ts = %d, op = "export", reqId = "lore2" } } }' % now)
+    poll(L)
+    raw = open('votc_state.json', 'rb').read()
+    st = json.loads(raw.decode('utf-8'))  # strict UTF-8 decode: fails if truncation split a character
+    bio = st['target']['biography']
+    check(st['target']['typeDescription'] == 'A lord added by another mod.', 'mod-added character type works')
+    check(bio.endswith('…') and len(bio.encode('utf-8')) <= 4000 + 3 and set(bio[:-1]) == {'长'}, 'long biography truncated on a UTF-8 boundary (%d bytes)' % len(bio.encode('utf-8')))
 
     print('export of own hero (empty forename falls back to subtype)')
     L.execute('mock.listeners["CharacterSelected"]({ character = function() return hero end })')

@@ -12,7 +12,7 @@
 -- is loaded with an empty environment, so it can only carry data.
 --------------------------------------------------------------------------------
 
-local VOTC_VERSION = "1.1.0"
+local VOTC_VERSION = "1.2.0"
 
 local STATE_FILE = "votc_state.json"
 local CMD_FILE = "votc_commands.lua"
@@ -101,6 +101,56 @@ local function clean_text(s)
 	s = s:gsub("{{[^}]*}}", "")
 	s = s:gsub("^%s+", ""):gsub("%s+$", "")
 	return s
+end
+
+local function nil_if_empty(s)
+	if s == "" then
+		return nil
+	end
+	return s
+end
+
+-- longest lore text sent to the app; cut on a UTF-8 character boundary
+local MAX_LORE_BYTES = 4000
+
+local function truncate_utf8(s, max_bytes)
+	if #s <= max_bytes then
+		return s
+	end
+	local cut = max_bytes
+	-- step back over UTF-8 continuation bytes (10xxxxxx) so no character is split
+	while cut > 0 do
+		local b = s:byte(cut + 1)
+		if not b or b < 0x80 or b >= 0xC0 then
+			break
+		end
+		cut = cut - 1
+	end
+	return s:sub(1, cut) .. "…"
+end
+
+-- Text from the game's context objects, e.g. a unit's historical description. Works for any
+-- record the game has loaded, including ones added by other mods, and is already localised.
+local function context_text(cco_type, id, expression)
+	local value = try(function()
+		if type(cco) == "function" then
+			local obj = cco(cco_type, id)
+			if obj then
+				return obj:Call(expression)
+			end
+		end
+	end, nil)
+	if (type(value) ~= "string" or value == "") and type(common) == "table" and common.get_context_value then
+		value = try(function() return common.get_context_value(cco_type, id, expression) end, nil)
+	end
+	if type(value) ~= "string" then
+		return nil
+	end
+	value = clean_text(value)
+	if value == "" then
+		return nil
+	end
+	return truncate_utf8(value, MAX_LORE_BYTES)
 end
 
 local function loc(key, fallback)
@@ -330,6 +380,11 @@ local function export_character(c)
 			t.traits[#t.traits + 1] = key
 		end
 	end
+	-- lore from the game database (vanilla or mods): what this kind of character is, and the
+	-- biography attached to the character's unit (legendary lords have their own)
+	t.typeDescription = context_text("CcoAgentSubtypeRecord", subtype, "DescriptionTextOverride")
+		or nil_if_empty(loc("agent_subtypes_description_text_override_" .. subtype, ""))
+	t.biography = context_text("CcoAgentSubtypeRecord", subtype, "AssociatedUnitOverride.HistoricalDescription")
 	t.army = export_army(c)
 	return t
 end

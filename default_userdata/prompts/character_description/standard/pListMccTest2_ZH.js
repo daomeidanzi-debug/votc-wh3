@@ -9,9 +9,11 @@ module.exports = (gameData, currentCharacterId) => {
 
     let output = "";
     output += `[${current.shortName}的角色信息：${buildCharacterItems(current, gameData).join("；")}]\n`;
+    output += buildLore(current);
     gameData.characters.forEach((char) => {
         if (char.id !== current.id) {
             output += `[${char.shortName}的角色信息：${buildCharacterItems(char, gameData).join("；")}]\n`;
+            output += buildLore(char);
         }
     });
 
@@ -27,6 +29,25 @@ module.exports = (gameData, currentCharacterId) => {
     }
     return output;
 };
+
+// 每个角色写进提示词的游戏背景最多这么多字
+const MAX_LORE_CHARS = 2000;
+
+function clip(text) {
+    return text.length > MAX_LORE_CHARS ? text.slice(0, MAX_LORE_CHARS) + "…" : text;
+}
+
+// 玩家写的背景（以此为准），然后是游戏自带的人物经历和角色类型介绍
+function buildLore(char) {
+    const w = char.wh3;
+    if (!w) return "";
+    let out = "";
+    if (w.backstory) out += `[${char.shortName}的背景故事（玩家设定，与其他资料冲突时以此为准）：${clip(w.backstory)}]\n`;
+    if (w.character.biography) out += `[${char.shortName}的经历（游戏设定）：${clip(w.character.biography)}]\n`;
+    if (w.character.typeDescription) out += `[${char.shortName}是什么样的角色（游戏设定）：${clip(w.character.typeDescription)}]\n`;
+    if (w.factionBackstory) out += `[${w.faction.name}的背景（玩家设定）：${clip(w.factionBackstory)}]\n`;
+    return out;
+}
 
 const TYPE_LABELS = {
     general: "领主",

@@ -571,7 +571,14 @@ export class Character {
     conversationSummaries: ConversationSummary[] = [];
 
     /** Raw Warhammer III data from the game bridge (character + the faction they belong to). */
-    wh3?: { character: Wh3Character, faction: Wh3Faction };
+    wh3?: {
+        character: Wh3Character,
+        faction: Wh3Faction,
+        /** user-written backstory for this character (from the backstories folder) */
+        backstory?: string,
+        /** user-written lore for the character's whole faction */
+        factionBackstory?: string
+    };
 
     /** A character with every field empty/zero, to be filled in by a game adapter. */
     static blank(): Character {

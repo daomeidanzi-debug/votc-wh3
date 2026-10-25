@@ -10,4 +10,6 @@ export const VOTC_PROMPTS_SYSTEM_DIR = path.join(VOTC_PROMPTS_DIR, 'system');
 export const VOTC_PROMPTS_CHARACTER_DIR = path.join(VOTC_PROMPTS_DIR, 'character_description');
 export const VOTC_PROMPTS_EXAMPLES_DIR = path.join(VOTC_PROMPTS_DIR, 'example_messages');
 export const VOTC_PROMPTS_HELPERS_DIR = path.join(VOTC_PROMPTS_DIR, 'helpers');
+/** Warhammer III: user-written backstories (plain .txt files) */
+export const VOTC_BACKSTORIES_DIR = path.join(VOTC_DATA_DIR, 'backstories');
   

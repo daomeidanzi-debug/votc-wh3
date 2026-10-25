@@ -15,7 +15,8 @@ import {
   SummariesManager,
   initializationService
 } from './utils';
-import { VOTC_ACTIONS_DIR, VOTC_PROMPTS_DIR, VOTC_SUMMARIES_DIR } from './utils/paths';
+import { VOTC_ACTIONS_DIR, VOTC_PROMPTS_DIR, VOTC_SUMMARIES_DIR, VOTC_BACKSTORIES_DIR } from './utils/paths';
+import { ensureBackstoriesDir } from './wh3/backstories';
 import { actionRegistry } from './actions/ActionRegistry';
 import { ActionEngine } from './actions/ActionEngine';
 import { promptConfigManager } from './conversation/PromptConfigManager';
@@ -1195,6 +1196,7 @@ app.on('ready', async () => {
   console.log('Initialization result:', initResult);
   // Leftover commands from a previous session must never reach the game
   wh3Bridge.clear();
+  ensureBackstoriesDir(VOTC_BACKSTORIES_DIR);
 
   chatWindow = createWindow(); // Create the main chat window and assign to global
 
@@ -1229,6 +1231,13 @@ app.on('ready', async () => {
   }
 
   const contextMenuItems: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'Open Backstories Folder',
+      click: () => {
+        ensureBackstoriesDir(VOTC_BACKSTORIES_DIR);
+        shell.openPath(VOTC_BACKSTORIES_DIR);
+      }
+    },
     {
       label: 'Open Settings',
       click: () => {

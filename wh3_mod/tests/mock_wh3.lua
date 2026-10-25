@@ -148,6 +148,19 @@ end
 
 function UIComponent(x) return x end
 
+-- context objects: mock.cco_values[type][id][expression] = value (as the engine's cco() global)
+mock.cco_values = { CcoAgentSubtypeRecord = {} }
+function cco(cco_type, id)
+	local records = mock.cco_values[cco_type] or {}
+	local record = records[id]
+	return {
+		Call = function(_, expression)
+			if record == nil then return nil end
+			return record[expression]
+		end,
+	}
+end
+
 cm = {}
 -- the savegame's saved values; tests copy this table between VMs to simulate save/load
 mock.saved_values = {}

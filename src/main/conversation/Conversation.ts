@@ -10,6 +10,8 @@ import { ActionEngine } from "../actions/ActionEngine";
 import { EventEmitter } from "events";
 import { wh3Bridge, Wh3BridgeError } from "../wh3/Wh3Bridge";
 import { buildGameDataFromWh3, describeExportError } from "../wh3/buildGameData";
+import { applyBackstories } from "../wh3/backstories";
+import { VOTC_BACKSTORIES_DIR } from "../utils/paths";
 import { shell } from "electron";
 import { TokenCounter, initializationService } from "../utils";
 import type { ActionInvocation } from "../actions/types";
@@ -122,6 +124,7 @@ export class Conversation {
                 return;
             }
             this.gameData = buildGameDataFromWh3(state, lang);
+            applyBackstories(this.gameData, VOTC_BACKSTORIES_DIR);
             console.log('GameData initialized with', this.gameData.characters.size, 'characters');
             this.gameData.loadCharactersSummaries();
             

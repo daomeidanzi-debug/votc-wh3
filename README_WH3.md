@@ -31,6 +31,20 @@
 3. 启动 **VOTC-WH3**，按 `Ctrl+Shift+H` 打开设置，配置 LLM（DeepSeek、OpenRouter、Ollama 等，和原版一样）。
    战锤3 安装目录会从 Steam 库里自动识别；识别不到时在设置里手动选择**包含 Warhammer3.exe 的文件夹**。
 
+## 人物背景
+
+AI 对话时会参考三种背景资料，**原版和其他模组新增的角色都适用**：
+
+1. **你写的背景**（优先级最高，和其他资料冲突时以它为准）：放在 `%APPDATA%\VOTC-WH3\votc_data\backstories\` 下的 UTF-8 `.txt` 文件。托盘菜单 “Open Backstories Folder” 可直接打开，里面的 README.txt 有说明。
+   - `<战役 ID>\<角色 ID>.txt`：只对某局战役里的某个角色生效；
+   - `<角色全名>.txt`（如 `卡尔·弗兰茨.txt`）或 `<角色类型 key>.txt`（如 `wh_main_emp_karl_franz.txt`）；
+   - `<派系 key>.txt`：该派系所有角色共享的背景。
+   改完文件后，下一次对话立刻生效。
+2. **传奇领主传记**：游戏里单位介绍页的那段生平。
+3. **角色类型介绍**：游戏对这类领主或英雄的描述。
+
+2、3 由模组在游戏里实时读取（`cco` 上下文接口，和游戏界面读的是同一份数据），所以会自动跟随游戏语言，也能读到其他模组添加的文本；项目里不复制任何游戏文本。
+
 ## 对话历史（按战役分开）
 
 每局战役第一次运行模组时会生成一个战役 ID（如 `wh_main_emp_empire_1792904083_0012`），存进存档（`cm:set_saved_value`）。
@@ -96,13 +110,17 @@ VOTC 和模组通过战锤3安装目录里的三个文件通信（Lua 的工作�
 
 | 现象 | 处理 |
 |---|---|
-| “Warhammer III is not responding” | 确认模组已在启动器中启用、已进入战役地图。打开游戏目录的 `lua_mod_log.txt`，应能看到 `[VOTC] bridge 1.1.0 started`。 |
+| “Warhammer III is not responding” | 确认模组已在启动器中启用、已进入战役地图。打开游戏目录的 `lua_mod_log.txt`，应能看到 `[VOTC] bridge 1.2.0 started`。 |
 | “请先在战役地图上点选一个角色……” | 先点选角色/定居点或打开外交界面，再按快捷键。 |
 | 外交界面里对话对象不对 | 外交面板的派系识别依赖游戏 UI，如果失效会退回到“上一次点选的角色”。先在地图上点选该派系的角色即可。 |
 | Permission Denied | 程序需要写游戏目录。以管理员身份运行 VOTC-WH3，或把游戏装到普通文件夹。 |
 | 快捷键没反应 | 看托盘图标的提示文字是哪个快捷键注册成功；或右键托盘图标点 “Talk to selected character”。 |
 
 设置里的“收集日志”按钮会一并打包 `lua_mod_log.txt` 和三个通信文件。
+
+## 发布到 Steam 创意工坊
+
+见 [wh3_mod/WORKSHOP.md](wh3_mod/WORKSHOP.md)：把 `votc_wh3.pack` 和同名的 `votc_wh3.png` 封面放进游戏 data 文件夹，在启动器的模组管理器里上传；里面附有中英文描述模板。注意创意工坊只发布模组，桌面程序需要另外提供下载。
 
 ## 测试
 
