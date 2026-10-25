@@ -14,8 +14,8 @@
 
 ## 一定要说明的事
 
-- 这个模组**单独不能用**，必须配合桌面程序 VOTC-WH3。安装包需要另外发布，例如放到你自己的 GitHub 仓库的 Releases 里，并在描述里给出链接。
-- VOTC 是 GPL-3.0 许可：发布程序时要同时公开源代码（推到你的 GitHub 仓库即可），并保留原作者署名与许可证。
+- 这个模组**单独不能用**，必须配合桌面程序 VOTC-WH3。安装包发布在 https://github.com/daomeidanzi-debug/votc-wh3/releases （发新版本：`gh release create <版本号> dist\votc-wh3-<版本>-setup.exe wh3_mod\votc_wh3.pack`）。
+- VOTC 是 GPL-3.0 许可：源代码公开在 https://github.com/daomeidanzi-debug/votc-wh3 （默认分支 `wh3-port`，保留了原版完整提交历史、原作者署名和 LICENSE）。
 - 模组只修改战役脚本，不改数据库表，和绝大多数模组兼容；多人战役中自动停用。
 
 ---
@@ -31,7 +31,8 @@
 - 谈判有真实后果：付钱、议和、宣战、结盟、贸易、附庸、割让定居点、调拨部队、授予特质、负伤、处决……危险操作会先征求你的同意
 - 每局战役独立记忆：同一局战役读档后角色仍记得你们聊过什么
 
-**需要：** 桌面程序 VOTC-WH3（下载：<在这里填你的发布链接>）和一个 LLM（DeepSeek、OpenRouter、本地 Ollama 等）。
+**需要：** 桌面程序 VOTC-WH3（下载：https://github.com/daomeidanzi-debug/votc-wh3/releases/latest ）和一个 LLM（DeepSeek、OpenRouter、本地 Ollama 等）。
+源代码（GPL-3.0）：https://github.com/daomeidanzi-debug/votc-wh3 ，基于 Voices of the Court：https://github.com/Voices-of-the-Court/VOTC
 游戏请使用无边框窗口模式。仅支持单人战役。
 
 ## Description template (English)
@@ -45,4 +46,5 @@ A port of the famous Crusader Kings III mod. Select any lord, hero or settlement
 - Real consequences: gold, peace, war, alliances, trade, vassals, ceded settlements, units, traits, wounds, executions — risky actions ask for your approval
 - Separate memory per campaign
 
-**Requires** the VOTC-WH3 desktop app (download: <your release link>) and an LLM (DeepSeek, OpenRouter, local Ollama…). Use borderless window mode. Single-player only.
+**Requires** the VOTC-WH3 desktop app (download: https://github.com/daomeidanzi-debug/votc-wh3/releases/latest ) and an LLM (DeepSeek, OpenRouter, local Ollama…). Use borderless window mode. Single-player only.
+Source code (GPL-3.0): https://github.com/daomeidanzi-debug/votc-wh3 — based on Voices of the Court: https://github.com/Voices-of-the-Court/VOTC
