@@ -19,7 +19,7 @@ export interface SummaryMetadata {
 
 // Types for initialization warnings
 export interface InitializationWarning {
-  type: 'ironman' | 'permission' | 'path_not_found' | 'path_detection' | 'debug_log_missing' | 'debug_log_unreadable';
+  type: 'permission' | 'path_not_found' | 'path_detection' | 'mod_missing';
   message: string;
   suggestion?: string;
 }

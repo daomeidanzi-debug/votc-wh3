@@ -14,7 +14,7 @@ export interface SandboxContext {
   gameData: any;
   sourceCharacter: any;
   targetCharacter?: any;
-  runGameEffect: (effectBody: string) => void;
+  runGameEffect: (effect: any) => void;
   args: Record<string, any>;
   conversation?: any;
   dryRun?: boolean;

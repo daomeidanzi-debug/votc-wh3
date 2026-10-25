@@ -61,11 +61,14 @@ export interface ActionCheckResult {
   reason?: string;
 }
 
+/** A Warhammer III bridge command, e.g. `{ op: "war", a: "<faction key>", b: "<faction key>" }`, or its JSON text. */
+export type GameCommand = Record<string, string | number | boolean | null | undefined> | string;
+
 export interface ActionRunContext {
   gameData: GameData;
   sourceCharacter: Character;
   targetCharacter?: Character;
-  runGameEffect: (effect: string) => void;
+  runGameEffect: (effect: GameCommand) => void;
   args: ActionArgumentValues;
   conversation?: Conversation; // Optional conversation access for actions
   dryRun?: boolean; // True when action is being previewed, not executed

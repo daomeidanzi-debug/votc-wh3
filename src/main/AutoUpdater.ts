@@ -3,6 +3,9 @@ import { dialog, BrowserWindow, shell } from 'electron';
 import log from 'electron-log';
 import { settingsRepository } from './SettingsRepository';
 
+/** The configured feed is the original CK3 VOTC; updating from it would replace this port. */
+const UPDATES_DISABLED = true;
+
 // Localization strings for updater dialogs
 const updaterTranslations: Record<string, {
   updateAvailable: { title: string; message: string; detail: string; download: string; viewChangelog: string; later: string };
@@ -285,6 +288,10 @@ export class AppUpdater {
   }
 
   public checkForUpdates() {
+    if (UPDATES_DISABLED) {
+      log.info('Update check skipped: the Warhammer III port has no update feed of its own');
+      return;
+    }
     log.info('Checking for updates...');
     // Apply the prerelease setting from user preferences
     autoUpdater.allowPrerelease = settingsRepository.getAllowPrerelease();

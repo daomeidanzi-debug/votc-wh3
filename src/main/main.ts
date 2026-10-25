@@ -5,8 +5,10 @@ import { settingsRepository } from './SettingsRepository';
 import { providerRegistry } from './llmProviders/ProviderRegistry';
 import { conversationManager } from './conversation/ConversationManager';
 import { LLMProviderConfig, PromptPreset, PromptSettings, ConnectionTestSubResult } from '@llmTypes';
-import { ClipboardListener } from './ClipboardListener';
-import { 
+import { wh3Bridge } from './wh3/Wh3Bridge';
+import type { Wh3CommandResult } from './wh3/types';
+import { isWh3GameDir } from './wh3/Wh3PathDetector';
+import {
   initLogger, clearLog,
   importLegacySummaries,
   exportPromptsZip,
@@ -34,7 +36,9 @@ import './llmProviders/GeminiProvider';
 
 import { letterManager } from './letter/LetterManager';
 import { v4 as uuidv4 } from 'uuid';
-import { runFileManager } from './actions/RunFileManager';
+
+/** Global hotkeys that open a conversation with the character selected in game, in order of preference. */
+const TALK_HOTKEYS = ['Control+Alt+T', 'Control+Shift+T', 'Control+Alt+Y'];
 import { finalizeConnectionTestResult } from './llmProviders/connectionTest';
 
 
@@ -424,17 +428,17 @@ const setupIpcHandlers = () => {
     }
   });
 
-  ipcMain.handle('llm:setCK3Folder', async (_, path: string | null) => {
-    settingsRepository.setCK3UserFolderPath(path);
-    // Restart letter manager log tailing when CK3 path is updated
-    if (path) {
-      try {
-        await letterManager.restartLogTailing();
-        console.log("Log tailing restarted after CK3 path update");
-      } catch (error) {
-        console.error("Failed to restart log tailing after CK3 path update:", error);
-      }
+  ipcMain.handle('llm:setCK3Folder', async (_, folder: string | null) => {
+    // Stores the Warhammer III install folder. Accept the data/ subfolder by mistake too.
+    let gameDir = folder;
+    if (gameDir && !isWh3GameDir(gameDir) && isWh3GameDir(path.dirname(gameDir))) {
+      gameDir = path.dirname(gameDir);
     }
+    if (gameDir && !isWh3GameDir(gameDir)) {
+      console.warn(`Selected folder does not contain Warhammer3.exe: ${gameDir}`);
+    }
+    settingsRepository.setCK3UserFolderPath(gameDir);
+    wh3Bridge.clear();
   });
 
   ipcMain.handle('llm:setModLocationPath', (_, path: string | null) => {
@@ -829,27 +833,14 @@ const setupIpcHandlers = () => {
         }
       }
       
-      // Get CK3 logs path from settings
+      // Warhammer III: the mod loader log plus the bridge files in the game folder
       const ck3Path = settingsRepository.getCK3UserFolderPath();
       if (ck3Path) {
-        const ck3LogsPath = path.join(ck3Path, 'logs');
-        
-        // Copy debug.log
-        const debugLogPath = path.join(ck3LogsPath, 'debug.log');
-        if (fs.existsSync(debugLogPath)) {
-          fs.copyFileSync(debugLogPath, path.join(logsFolder, 'debug.log'));
-        }
-        
-        // Copy game.log
-        const gameLogPath = path.join(ck3LogsPath, 'game.log');
-        if (fs.existsSync(gameLogPath)) {
-          fs.copyFileSync(gameLogPath, path.join(logsFolder, 'game.log'));
-        }
-        
-        // Copy error.log
-        const errorLogPath = path.join(ck3LogsPath, 'error.log');
-        if (fs.existsSync(errorLogPath)) {
-          fs.copyFileSync(errorLogPath, path.join(logsFolder, 'error.log'));
+        for (const name of ['lua_mod_log.txt', 'votc_state.json', 'votc_ack.json', 'votc_commands.lua']) {
+          const src = path.join(ck3Path, name);
+          if (fs.existsSync(src)) {
+            fs.copyFileSync(src, path.join(logsFolder, name));
+          }
         }
       }
       
@@ -1199,19 +1190,17 @@ app.on('ready', async () => {
   promptConfigManager.seedDefaults();
   setupIpcHandlers(); // Setup handlers first
   
-  // Run initialization service to detect CK3 path and create required files
+  // Detect the Warhammer III folder and check the mod / write access
   const initResult = await initializationService.initialize();
   console.log('Initialization result:', initResult);
-  
+  // Leftover commands from a previous session must never reach the game
+  wh3Bridge.clear();
+
   chatWindow = createWindow(); // Create the main chat window and assign to global
-  
-  // Set up auto-updater
+
+  // Auto-update is disabled: the update feed belongs to the original CK3 VOTC and
+  // would replace this Warhammer III port with the CK3 build.
   appUpdater.setMainWindow(chatWindow);
-  
-  // Check for updates on startup
-  if (app.isPackaged) {
-    appUpdater.checkForUpdates();
-  }
   
   // Send initialization warnings to renderer after it's ready
   if (initResult.warnings.length > 0 && chatWindow && !chatWindow.isDestroyed()) {
@@ -1239,7 +1228,7 @@ app.on('ready', async () => {
     tray = null;
   }
 
-  const contextMenu = Menu.buildFromTemplate([
+  const contextMenuItems: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'Open Settings',
       click: () => {
@@ -1259,19 +1248,11 @@ app.on('ready', async () => {
         app.quit();
       }
     }
-  ]);
+  ];
 
-  if (tray) {
-    tray.setToolTip('VOTC Overlay');
-    tray.setContextMenu(contextMenu);
-  }
-
-  // Create and start clipboard listener
-  const clipboardListener = new ClipboardListener();
-  clipboardListener.start();
-  
-  clipboardListener.on('VOTC:IN', () => {
-    console.log('VOTC:IN triggered - showing chat interface');
+  // Start a conversation with whoever is selected in Warhammer III
+  const startTalk = () => {
+    console.log('Talk hotkey triggered - showing chat interface');
 
     // Ensure window exists
     if (!chatWindow || chatWindow.isDestroyed()) {
@@ -1285,31 +1266,31 @@ app.on('ready', async () => {
     chatWindow.show();
     chatWindow.focus();
     chatWindow.webContents.send('chat-reset'); // This will trigger showChat in App.tsx
+  };
+
+  // Report actions the game rejected (e.g. not enough gold, character already dead)
+  wh3Bridge.on('command-failed', (result: Wh3CommandResult) => {
+    const conversation = conversationManager.getCurrentConversation();
+    conversation?.addSystemError(`Game action "${result.op}" failed`, result.message);
   });
 
-  clipboardListener.on('VOTC:EFFECT_ACCEPTED', () => {
-    console.log('VOTC:EFFECT_ACCEPTED detected - clearing run file');
-    runFileManager.clear();
-  })
-
-  clipboardListener.on('VOTC:LETTER', async () => {
-    console.log('VOTC:LETTER detected - generating reply');
-    try {
-      await letterManager.processLatestLetter();
-    } catch (error) {
-      console.error('Failed to process letter:', error);
+  let talkAccel: string | null = null;
+  for (const accel of TALK_HOTKEYS) {
+    if (globalShortcut.register(accel, startTalk)) {
+      talkAccel = accel;
+      break;
     }
-  });
+    console.log(`Failed to register talk shortcut (${accel}), trying next`);
+  }
+  console.log(`Talk shortcut registered: ${talkAccel ?? 'none'}`);
+  if (tray) {
+    tray.setToolTip(`VOTC for Warhammer III - talk: ${talkAccel ?? 'tray menu'}`);
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: `Talk to selected character${talkAccel ? ` (${talkAccel})` : ''}`, click: startTalk },
+      ...contextMenuItems,
+    ]));
+  }
 
-  clipboardListener.on('VOTC:LETTER_ACCEPTED', () => {
-    console.log('VOTC:LETTER_ACCEPTED detected - clearing letters.txt');
-    try {
-      letterManager.clearLettersFile();
-    } catch (error) {
-      console.error('Failed to clear letters file:', error);
-    }
-  });
-  
   // Add IPC handler for hiding chat UI (not window - window stays persistent)
   ipcMain.on('chat-hide', () => {
     // Send event to renderer to hide both chat and config panels
@@ -1369,6 +1350,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   tray?.destroy();
+  globalShortcut.unregisterAll();
+  wh3Bridge.dispose();
   // Stop letter manager log tailing
   letterManager.stopLogTailing();
   // Stop focus monitoring

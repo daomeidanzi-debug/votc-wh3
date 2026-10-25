@@ -243,7 +243,7 @@ static buildFinalSummary(
 
     const baseSystem = {
         role: 'system',
-        content: `You are summarizing a medieval roleplay conversation between these characters: ${characters}.`
+        content: `You are summarizing a Warhammer fantasy roleplay conversation between these characters: ${characters}.`
     };
 
     const buildConversationText = (msgs: Message[], title: string) => ({

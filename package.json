@@ -1,8 +1,8 @@
 {
-  "name": "voices-of-the-court",
-  "productName": "VOTC",
+  "name": "votc-wh3",
+  "productName": "VOTC-WH3",
   "version": "2.0.4",
-  "description": "Reimplementation of Voices of the Court mod for Crusader Kings III for better experience",
+  "description": "Voices of the Court ported to Total War: WARHAMMER III - talk to lords and heroes with an LLM and let them act in your campaign",
   "main": "out/main/main.js",
   "scripts": {
     "typedefs": "node ./build/createGameDataTypeDefs.js",
@@ -11,9 +11,12 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
     "dev": "electron-vite dev -w --inspect",
-    "build": "npm run typedefs && npm run typecheck && electron-vite build",
+    "setup": "npm install --ignore-scripts && node scripts/setup-wh3.cjs",
+    "pack:mod": "node wh3_mod/build_pack.cjs",
+    "test:wh3": "python wh3_mod/tests/run_tests.py",
+    "build": "npm run pack:mod && npm run typedefs && npm run typecheck && electron-vite build",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win",
+    "build:win": "npm run build && node scripts/package-win.cjs",
     "build:mac": "npm run build && electron-builder --mac"
   },
   "keywords": [],

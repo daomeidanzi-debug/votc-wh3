@@ -87,7 +87,7 @@ export class PromptConfigManager {
   }
 
   getDefaultMainTemplateContent(): string {
-    const fallback = 'You are a character in a medieval strategy game.';
+    const fallback = 'You are a character in a Total War: WARHAMMER III campaign.';
     try {
       this.ensurePromptDirs();
       const fullPath = path.join(VOTC_PROMPTS_DIR, DEFAULT_MAIN_TEMPLATE_PATH);

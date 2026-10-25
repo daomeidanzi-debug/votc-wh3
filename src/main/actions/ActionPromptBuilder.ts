@@ -106,7 +106,7 @@ You are now processing the NPC "${npc.fullName}" turn, but you may still output 
 
     messages.push({
       role: "system",
-      content: `Characters in this conversation (order matches CK3 global list):\n${characterRosterLines.join("\n")}\n\nYou are now selecting actions for the current turn.`
+      content: `Characters in this conversation (Total War: WARHAMMER III campaign):\n${characterRosterLines.join("\n")}\n\nYou are now selecting actions for the current turn.`
     });
 
     // 5. Available Actions — cleaner formatting

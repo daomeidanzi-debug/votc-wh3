@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ConversationSummary } from '../gameData/Character';
+import { CAMPAIGN_INFO_FILE } from '../gameData/GameData';
 import { VOTC_SUMMARIES_DIR } from './paths';
 
 export interface SummaryMetadata {
@@ -38,8 +39,20 @@ export class SummariesManager {
         
         // Try to get player name from the player character's summary file (file with same name as folder)
         let playerName: string | undefined;
+        // Warhammer III: folders are campaigns; show "<player> - <faction> (turn N)" from the campaign info
+        const campaignInfoFile = path.join(playerPath, CAMPAIGN_INFO_FILE);
+        if (fs.existsSync(campaignInfoFile)) {
+          try {
+            const info = JSON.parse(fs.readFileSync(campaignInfoFile, 'utf8'));
+            if (info && typeof info.playerName === 'string') {
+              playerName = `${info.playerName}${info.playerFaction ? ` - ${info.playerFaction}` : ''}${info.lastTurn ? ` (turn ${info.lastTurn})` : ''}`;
+            }
+          } catch (error) {
+            console.warn(`Failed to read campaign info from ${campaignInfoFile}:`, error);
+          }
+        }
         const playerCharacterFile = path.join(playerPath, `${playerId}.json`);
-        if (fs.existsSync(playerCharacterFile)) {
+        if (!playerName && fs.existsSync(playerCharacterFile)) {
           try {
             const playerFileContent = fs.readFileSync(playerCharacterFile, 'utf8');
             const playerSummaries = JSON.parse(playerFileContent) as ConversationSummary[];

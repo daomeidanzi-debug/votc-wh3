@@ -69,6 +69,9 @@ export class ConversationManager {
             throw new Error('No active conversation');
         }
 
+        // game data arrives asynchronously from Warhammer III
+        await this.currentConversation.ready;
+
         if (!this.currentConversation.isActive) {
             console.error('Current conversation is not active');
             throw new Error('Current conversation is not active');

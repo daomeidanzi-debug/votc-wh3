@@ -1,110 +1,33 @@
-// Personality-based example messages. Returns an array of chat messages.
-// Chinese localization - uses "性格特质" for personality trait category
+// 《战锤3》示例对话：用角色所属种族的口吻打一声招呼（中文）
+// Returns an array of chat messages.
 
-/**@typedef {import('../../../src/main/gamedata_typedefs.js').GameData} GameData */
+/**@typedef {import('../../../gamedata_typedefs').GameData} GameData */
 /**@param {GameData} gameData */
 module.exports = (gameData, id) => {
     const ai = gameData.characters.get(id || gameData.aiID);
+    const player = gameData.characters.get(gameData.playerID);
+    if (!ai || !player || !ai.wh3) return [];
 
-    /**
-     * Build up to MAX_TRAITS personality-driven example exchanges.
-     */
-    const MAX_TRAITS = 5;
-    const msgs = [];
+    const line = GREETINGS[ai.wh3.faction.subcultureKey];
+    if (!line) return [];
 
-    // Normalize and filter personality traits (Chinese localization)
-    const normalizedTraits = (ai.traits || []).map(trait => {
-        if (typeof trait === 'string') {
-            return { name: trait, category: '性格特质' };
-        }
-        return {
-            name: trait.name || '',
-            category: trait.category || ''
-        };
-    });
+    return [
+        { role: "user", name: player.shortName, content: "你想要什么？" },
+        { role: "assistant", name: ai.shortName, content: line.replace(/\{player\}/g, player.shortName) },
+    ];
+};
 
-    const personalityTraits = normalizedTraits.filter(trait =>
-        trait.category && trait.category.includes("性格特质")
-    );
-
-    if (personalityTraits.length === 0) {
-        return msgs;
-    }
-
-    const max = Math.min(MAX_TRAITS, personalityTraits.length);
-    for (let i = 0; i < max; i++) {
-        const trait = personalityTraits[i];
-        const detail = traitMessageMap.get(trait.name) || `这是我本性的一部分。`;
-        const prompts = [
-            "性格如何？",
-            "还有别的吗？",
-            "就这些吗？",
-            "还有呢？",
-            "再来一个？"
-        ];
-
-        msgs.push({
-            role: "user",
-            name: "Narrator",
-            content: prompts[Math.min(i, prompts.length - 1)]
-        });
-
-        const connector = i === 0 ? "嗯，我是" : i === 1 ? "我也是" : "我仍然是";
-        const output = `*${ai.shortName}的眼睛亮了起来* ${connector}${trait.name}，${detail}`;
-
-        msgs.push({
-            role: "assistant",
-            name: ai.shortName,
-            content: output
-        });
-    }
-
-    return msgs;
-}
-
-// custom trait descriptions (Chinese)
-const traitMessageMap = new Map([
-    ["忠贞", "我不喜欢亲密的接触，这使我避开了肉体的诱惑。"],
-    ["色欲", "肉欲之火在我的灵魂中熊熊燃烧。"],
-    ["节制", "我认为最好适度地享受事物。"],
-    ["暴食", "我嘲笑适度；我全都要！"],
-    ["慷慨", "我对慈善行为并不陌生。"],
-    ["贪婪", "我坚持捂紧自己的钱包，并总在找机会充盈它。"],
-    ["勤勉", "我不会逃避艰苦的工作。"],
-    ["懒惰", "我总是会选择生活中最简单的路。"],
-    ["暴怒", "我很容易发怒。"],
-    ["冷静", "我做事从容，过着慢节奏的生活。"],
-    ["急躁", "我认为大多数事情越快发生越好，最好现在就发生！"],
-    ["耐心", "静观其变、等待时机是我的专长。"],
-    ["谦卑", "我在生活中所求不多。"],
-    ["傲慢", "我毫不怀疑自己的价值。"],
-    ["狡诈", "撒谎和欺骗是我的天性。"],
-    ["诚实", "我非常重视事实与真诚。"],
-    ["怯懦", "我一点也不喜欢受到挑战或是惊吓。"],
-    ["勇敢", "挑战或是危险？我无所畏惧。"],
-    ["害羞", "我更喜欢避免与他人互动。"],
-    ["合群", "我喜欢与他人共度时光。"],
-    ["野心勃勃", "我知我所求，绝不踟蹰不前。"],
-    ["安于现状", "无论我拥有的是多是少，我都很满足。"],
-    ["专断", "我只关心自己的事，很少顾及他人。"],
-    ["公正", "我有强烈的正义感。"],
-    ["愤世嫉俗", "我相信个人利益高于一切。"],
-    ["狂热", "宗教信仰在我心中燃烧着闪耀的光芒。"],
-    ["多疑", "我在每处阴影中都会看到敌人。"],
-    ["轻信他人", "我总是很迅速地就将我的信任交付他人。"],
-    ["慈悲", "我既仁慈又有同情心，是个热心的人。"],
-    ["冷酷", "我冷血又无情，对大多数人漠不关心。"],
-    ["虐待狂", "没什么能比别人的痛苦更能带给我快乐了。"],
-    ["固执", "我不会为任何事让步。"],
-    ["多变", "我经常改变我的想法，让人对我难以预料。"],
-    ["睚眦必报", "我很难忘记别人对我的怠慢或是犯下的错误。"],
-    ["宽宏大量", "我能很快从大多数事情中走出来。"],
-    ["古怪", "我的行为在其他人看来不稳定、不理性，但相较于彻底的疯狂又存在一定的章法。"],
-    ["闹腾", "我总是非常好动，充满活力且喜欢恶作剧。不论我干啥，常会把人弄伤。"],
-    ["可爱", "我知道如何将别人玩弄于我的股掌之间，我的态度甜蜜而亲切，这让我几乎能逃脱任何惩罚。"],
-    ["好奇", "我很少有闭嘴的时候。我总是问问题，对所有人和所有事都很好奇。"],
-    ["沉思", "我经常陷入沉思，试图理解我周边的世界。我通常依靠书本和制度来弄懂事物。"],
-    ["专横", "我经常被看到命令周围的儿童。我不仅关心以正确的方式做好事情，更要以我的方式做事。"],
-    ["忠信", "我对待我自己的关系比起大部分人要更加严肃认真。"],
-    ["奸猾", "大部分人珍视的关系，我从中看到了机遇。"],
-]);
+const GREETINGS = {
+    wh_main_sc_emp_empire: "*整了整胸甲* 西格玛在看着我们俩，{player}。有话直说——我还有一个行省要守，没工夫猜谜。",
+    wh_main_sc_dwf_dwarfs: "*捋着胡子眯起眼* 哼。又一个来浪费矮人时间的。说吧，{player}，记住——我的羽毛笔和怨恨之书就在手边。",
+    wh_main_sc_grn_greenskins: "*把指节捏得咔咔响* 喂！{player}！你是给俺和小子们找架打的，还是来挨揍的？快说，WAAAGH 可不等人！",
+    wh_main_sc_grn_savage_orcs: "*咧开獠牙，战纹还没干* 啥？你要啥，{player}？戈克说说话的都是软蛋。莫克说听听。那……你说。说完咱打。",
+    wh_main_sc_vmp_vampire_counts: "*冷冷地盯着你，一眨不眨* 真有意思。活人还会来讨价还价。说下去吧，{player}——我有的是时间，而你没有。",
+    wh_dlc08_sc_nor_norsca: "*大笑着把蜜酒角杯砸在桌上* 哈！{player} 来到北方的篝火旁了！说吧，要是你的话软弱无力，诸神会听见的。",
+    wh2_main_sc_skv_skaven: "*胡须抽动，眼珠乱转* 是-是，{player}，欢迎-欢迎！我是卑微的仆人，非常诚实-可靠。你想要-需要什么，嗯？",
+    wh3_main_sc_ogr_ogre_kingdoms: "*肚子咕噜作响* 你带肉了吗，{player}？没有？那就带金子了。总之，要是谈太久，总得有人被吃掉。",
+    wh3_main_sc_kho_khorne: "*从骷髅面盔下低吼* 话。又是话。快点说完，{player}，不然我就要为血神洒点别的东西了。",
+    wh3_main_sc_nur_nurgle: "*温和地笑着，苍蝇嗡嗡乱飞* 啊，{player}，过来，再近点！老祖父的礼物就是要分享的。什么风把你吹进我的花园了？",
+    wh3_main_sc_cth_cathay: "*彬彬有礼地行礼* 愿和谐引导你我的言辞，{player}。天庭早有耳闻。是什么事让你来到我面前？",
+    wh3_main_sc_ksl_kislev: "*拂去毛皮斗篷上的霜* 严寒不等人，{player}，北方的蛮族也不会等。说出你的来意吧。",
+};

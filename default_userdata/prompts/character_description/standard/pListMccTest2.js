@@ -1,495 +1,136 @@
-// Detailed persona builder supporting multiple characters in conversation.
+// Total War: WARHAMMER III persona builder.
 // Exports a function (gameData, currentCharacterId?) => string
 
 /**@typedef {import('../../../gamedata_typedefs').GameData} GameData */
 /**@param {GameData} gameData */
 module.exports = (gameData, currentCharacterId) => {
-    const player = gameData.characters.get(gameData.playerID);
-    const mainChar = gameData.characters.get(currentCharacterId || gameData.aiID);
-    const date = gameData.date;
-    const location = gameData.location;
-    let locationController = gameData.locationController;
-    
-    if (locationController === player.fullName) {
-        locationController = player.shortName;
-    } else if (locationController === mainChar.fullName) {
-        locationController = mainChar.shortName;
-    }
-    
-    const scene = gameData.scene;
-    
-    // current character as primary scope
-    const current = mainChar;
+    const current = gameData.characters.get(currentCharacterId || gameData.aiID);
+    if (!current) return "";
 
     let output = "";
-    output += `[${current.shortName}'s character info: ${buildCharacterItems(current, gameData, true).join("; \n")}]\n`;
-    
-    // other characters as secondary scopes
+    output += `[${current.shortName}'s Persona: ${buildCharacterItems(current, gameData).join("; ")}]\n`;
     gameData.characters.forEach((char) => {
         if (char.id !== current.id) {
-            output += `[${char.shortName}'s character info: ${buildCharacterItems(char, gameData, false).join("; \n")}]\n`;
+            output += `[${char.shortName}'s Persona: ${buildCharacterItems(char, gameData).join("; ")}]\n`;
         }
     });
 
-    const scenarioLine = `[date(${date}), location(${location}), scenario(${scenario()})]`;
-
-    output += scenarioLine;
-    return output;
-
-    function scenario() {
-      let participantsListLine = ""
-      gameData.characters.forEach((char) => {
-        if (char.id !== current.id)
-        participantsListLine += `${char.shortName}, `
-      })
-      participantsListLine = participantsListLine.slice(0, -2);
-        switch (scene) {
-            case "throne_room":
-                return `${mainChar.shortName} is in ${locationController}'s throneroom with ${participantsListLine}.`;
-            case "garden":
-                return `${mainChar.shortName} meets ${participantsListLine} in ${locationController}'s castle garden.`;
-            case "bedchamber":
-                return `${mainChar.shortName} is in the private bedchamber with ${participantsListLine}.`;
-            case "feast":
-                return `${mainChar.shortName} talks with ${participantsListLine} during a feast hosted by ${locationController}.`;
-            case "army_camp":
-                return `${mainChar.shortName} is in the army camp with ${participantsListLine}.`;
-            case "hunt":
-                return `${mainChar.shortName} is hunting with ${participantsListLine} in a foggy forest.`;
-            case "dungeon":
-                return `${mainChar.shortName} is in the dungeon with ${participantsListLine}.`;
-            case "alley":
-                return `${mainChar.shortName} meets ${participantsListLine} in a narrow, hidden alley.`;
-            default:
-                return `${mainChar.shortName} meets ${participantsListLine} in ${scene}.`;
-        }
+    const info = gameData.wh3;
+    const scene = [
+        `date(${gameData.date})`,
+        `scene(${gameData.scene})`,
+        gameData.location ? `location(${gameData.location}${gameData.locationController ? `, held by ${gameData.locationController}` : ""})` : null,
+    ].filter(Boolean);
+    output += `[Setting: Total War: WARHAMMER III campaign; ${scene.join("; ")}]`;
+    if (info && !info.sameFaction) {
+        output += `\n[Diplomacy between ${info.playerFaction.name} and ${info.targetFaction.name}: ${describeRelation(info.targetFaction)}]`;
     }
+    return output;
 };
 
+const TYPE_LABELS = {
+    general: "lord",
+    colonel: "captain",
+    champion: "champion (hero)",
+    wizard: "wizard (hero)",
+    spy: "spy (hero)",
+    dignitary: "dignitary (hero)",
+    engineer: "engineer (hero)",
+    runesmith: "runesmith (hero)",
+};
 
-    function buildCharacterItems(char, gameData, isCurrent) {
-  const items = [];
+// How each race talks; used to give the AI a recognisable voice.
+const VOICES = {
+    wh_main_sc_emp_empire: "proud man of the Empire, swears by Sigmar, values duty, order and the Elector Counts' politics",
+    wh_main_sc_dwf_dwarfs: "gruff dwarf, holds grudges written in the Book of Grudges, distrusts elves, respects gold, ale and old oaths; uses words like 'umgi', 'zaki', 'grobi'",
+    wh_main_sc_grn_greenskins: "brutal orc or goblin, speaks crude broken orkish slang ('WAAAGH!', 'da boyz', 'humies', 'stunties'), respects only strength and a good fight",
+    wh_main_sc_grn_savage_orcs: "savage orc, even cruder orkish slang, trusts warpaint and Gork and Mork, loves fighting more than anything",
+    wh_main_sc_vmp_vampire_counts: "aristocratic undead noble of Sylvania, cold, patient and condescending to the living, thinks in centuries",
+    wh_main_sc_brt_bretonnia: "chivalrous Bretonnian, devoted to the Lady of the Lake and the code of chivalry, looks down on peasants",
+    wh_main_sc_chs_chaos: "Chaos warrior seeking the favour of the Dark Gods, menacing, contemptuous of weakness, speaks of glory and the End Times",
+    wh_dlc08_sc_nor_norsca: "Norscan raider, boastful, worships the Dark Gods, loves plunder, monsters and glory in battle",
+    wh_dlc03_sc_bst_beastmen: "bestial Beastman, hateful of civilisation, short savage sentences, speaks of herdstones and ruin",
+    wh_dlc05_sc_wef_wood_elves: "aloof Asrai of Athel Loren, guardian of the forest, distant and dangerous towards trespassers",
+    wh2_main_sc_hef_high_elves: "proud Asur of Ulthuan, refined and arrogant, sees younger races as children, loathes the Druchii",
+    wh2_main_sc_def_dark_elves: "cruel Druchii of Naggaroth, cunning, sadistic, treats others as future slaves, hates the Asur",
+    wh2_main_sc_lzd_lizardmen: "cold servant of the Old Ones' Great Plan, speaks of prophecy and order, uninterested in petty mammal politics",
+    wh2_main_sc_skv_skaven: "treacherous Skaven, speaks fast and fawning with repeated words ('yes-yes', 'quick-quick', 'man-things'), always plotting to stab rivals in the back, worships the Horned Rat",
+    wh2_dlc09_sc_tmb_tomb_kings: "ancient Tomb King of Nehekhara, imperious, speaks of eternity, dynasties and stolen grave goods",
+    wh2_dlc11_sc_cst_vampire_coast: "undead pirate of the Vampire Coast, nautical slang, greedy for treasure, theatrical",
+    wh3_main_sc_ksl_kislev: "hardy Kislevite, stern and loyal to the Ice Queen or the Motherland, values bravery against the northern hordes",
+    wh3_main_pro_sc_ksl_kislev: "hardy Kislevite, stern and loyal to the Motherland, values bravery against the northern hordes",
+    wh3_main_sc_cth_cathay: "honourable noble of Grand Cathay, formal and courteous, speaks of harmony, the Celestial Dragon Emperor and the Great Bastion",
+    wh3_main_sc_ogr_ogre_kingdoms: "hungry ogre, cares about food, meat and mercenary pay, blunt and loud, measures worth by the size of the belly",
+    wh3_main_sc_kho_khorne: "Khornate warrior, obsessed with blood and skulls for the Blood God, despises magic and cowardice ('BLOOD FOR THE BLOOD GOD!')",
+    wh3_main_pro_sc_kho_khorne: "Khornate warrior, obsessed with blood and skulls for the Blood God",
+    wh3_main_sc_nur_nurgle: "jovial follower of Grandfather Nurgle, speaks warmly of plagues, rot and the gift of decay",
+    wh3_main_sc_sla_slaanesh: "seductive servant of Slaanesh, obsessed with excess, perfection and sensation, manipulative and flattering",
+    wh3_main_sc_tze_tzeentch: "scheming servant of Tzeentch, riddles and plots within plots, delights in change and deception",
+    wh3_main_pro_sc_tze_tzeentch: "scheming servant of Tzeentch, riddles and plots within plots",
+    wh3_main_sc_dae_daemons: "Daemon Prince of undivided Chaos, arrogant, speaks of the Realm of Chaos and the Dark Gods",
+    wh3_dlc23_sc_chd_chaos_dwarfs: "cruel Chaos Dwarf of the Dawi Zharr, worships Hashut, industrious, enslaves others, scorns their western kin",
+    wh3_dlc29_sc_nag_undead_legions: "servant of Nagash, cold, ancient and absolute, speaks of the Great Necromancer's will",
+    wh_main_sc_teb_teb: "mercenary-minded noble of the Southern Realms (Tilea/Estalia), pragmatic and fond of gold and intrigue",
+};
 
-  items.push(`id(${char.id})`);
-  items.push(`name: ${char.firstName}`);
-  items.push(`full name: ${char.fullName}`);
-  items.push(mainPosition(char));
-
-  if (char.heldCourtAndCouncilPositions) {
-    items.push(`${char.heldCourtAndCouncilPositions} of ${char.liege || "unknown liege"}`);
-  }
-
-  items.push(houseAndStatus(char));
-  if (char.primaryTitle !== "None of" || char.primaryTitle !== "None" || char.primaryTitle !== "None von" || char.primaryTitle !== "None de") items.push(`primary title: ${char.primaryTitle}`);
-  if (char.titleRankConcept !== "concept_none") items.push(`title rank: ${char.titleRankConcept}`);
-  if (char.capitalLocation) items.push(`capital: ${char.capitalLocation}`);
-  if (char.location) items.push(`current location: ${char.location}`);
-
-  const personalityTraits = (char.traits || []).filter((t) => t.category === "Personality Trait");
-  if (personalityTraits.length) {
-    items.push(
-      `personality traits: ${personalityTraits
-        .map((t) => `${t.name}${t.desc ? ` (${t.desc})` : ""}`)
-        .join(", ")}`
-    );
-  }
-
-  const otherTraits = (char.traits || []).filter((t) => t.category !== "Personality Trait");
-  if (otherTraits.length) {
-    items.push(
-      `other traits: ${otherTraits
-        .map((t) => `${t.name} [${t.category}]${t.desc ? ` (${t.desc})` : ""}`)
-        .join(", ")}`
-    );
-  }
-
-  if (char.sexuality) items.push(`sexuality: ${char.sexuality}`);
-  if (char.personality) items.push(`personality: ${char.personality}`);
-  
-  // Personality values (9 axes from -100 to +100)
-  const personalityDesc = personalityDescription(char);
-  if (personalityDesc && isCurrent) items.push(personalityDesc);
-  
-  items.push(`marital status: ${char.fullName} is ${marriage(char)}`);
-  items.push(describeProwess(char));
-  items.push(goldStatus(char));
-  items.push(`age: ${char.age}`);
-  if (char.faith) items.push(`faith: ${char.faith}`);
-  if (char.culture) items.push(`culture: ${char.culture}`);
-
-  items.push(listOpinionsToCharacters(char, gameData));
-  if (isCurrent) {
-    gameData.characters.forEach((otherChar) => {
-      if (otherChar.id !== char.id) {
-        items.push(opinionBreakdownLine(char, otherChar.id, gameData));
-      }
-    })
-  }
-  items.push(listRelationsToCharacters(char, gameData));
-
-
-
-  if (char.treasury) {
-    items.push(
-      `treasury: ${char.treasury.amount.toFixed(2)} (${char.treasury.tooltip || "no tooltip"})`
-    );
-  }
-
-  if (char.income) {
-    items.push(
-      `income: gold ${char.income.gold.toFixed(2)}, balance ${char.income.balance.toFixed(2)}`
-    );
-    // income breakdown intentionally omitted to avoid prompt bloat
-  }
-
-  if (char.influence) items.push(`influence: ${char.influence.amount} ${char.influence.tooltip || ""}`.trim());
-  if (char.herd) items.push(`herd: ${char.herd.amount} ${char.herd.breakdown || ""}`.trim());
-
-  if (char.legitimacy) {
-    items.push(
-      `legitimacy: ${char.legitimacy.type}, level ${char.legitimacy.level}, value ${char.legitimacy.value.toFixed(2)}`
-    );
-  }
-
-  if (char.troops && char.troops.totalOwnedTroops > 0) items.push(troopsLine(char));
-
-  if (char.laws && char.laws.length) {
-    items.push(`laws: ${char.laws.map((l) => l.name).join(", ")}`);
-  }
-
-  // Sensitive: secrets only for current character (regardless of playerID)
-  if (isCurrent) {
-    const secrets = secretsLine(char);
-    if (secrets) items.push(secrets);
-  }
-
-  // Sensitive: known secrets only for current character
-  if (isCurrent) {
-    const knownSecrets = knownSecretsLine(char);
-    if (knownSecrets) items.push(knownSecrets);
-  }
-
-  if (char.modifiers && char.modifiers.length) {
-    items.push(
-      `modifiers: ${char.modifiers
-        .map((m) => `${m.name}${m.description ? ` (${m.description})` : ""}`)
-        .join(", ")}`
-    );
-  }
-
-  // Sensitive: internal stress only for current character
-  if (isCurrent && char.stress) {
-    items.push(
-      `stress: level ${char.stress.level}, value ${char.stress.value}, progress ${char.stress.progress}`
-    );
-  }
-  if (!isCurrent && char.stress) {
-    items.push(`stress: level ${char.stress.level}`);
-  }
-
-  const family = familyLine(char);
-  if (family) items.push(family);
-
-  // Sensitive: per-character conversation summaries only for current character
-  // if (isCurrent) {
-  //   const summaries = conversationSummariesLine(char);
-  //   if (summaries) items.push(summaries);
-  // }
-
-  return items.filter(Boolean);
-}
-
-
-function mainPosition(char) {
-  if (char.isLandedRuler) {
-    return char.isIndependentRuler
-      ? `Independent ruler of ${char.primaryTitle}`
-      : `Ruler of ${char.primaryTitle}, vassal of ${char.liege}`;
-  }
-  if (char.isKnight) {
-    return `Knight of ${char.liege}`;
-  }
-  if (char.isRuler) {
-    return `Leader of ${char.primaryTitle}`;
-  }
-  return `Follower of ${char.liege || "unknown lord"}`;
-}
-
-function houseAndStatus(char) {
-  let line = char.sheHe === "she" ? "woman" : "man";
-  line += char.house ? `, of house ${char.house}` : ", lowborn";
-  return line;
-}
-
-function marriage(char) {
-  if (char.consort) return `married to ${char.consort}`;
-  return "unmarried";
-}
-
-function describeProwess(char) {
-  const p = char.prowess || 0;
-  if (p >= 15) return `prowess: ${p} (formidable warrior)`;
-  if (p >= 10) return `prowess: ${p} (skilled combatant)`;
-  if (p >= 5) return `prowess: ${p} (trained fighter)`;
-  if (p > 0) return `prowess: ${p} (inexperienced fighter)`;
-  return `prowess: ${p} (non-combatant)`;
-}
-
-function goldStatus(char) {
-  const gold = char.gold || 0;
-  if (gold >= 1000) return `wealthy (gold: ${gold})`;
-  if (gold > 500) return `comfortable (gold: ${gold})`;
-  if (gold > 100) return `moderate wealth (gold: ${gold})`;
-  if (gold > 0) return `poor (gold: ${gold})`;
-  if (gold === 0) return "has no gold";
-  return `in debt (gold: ${gold})`;
-}
-
-function personalityDescription(char) {
-  const traits = [];
-  
-  // BOLDNESS: Craven (-100) ↔ Brave (+100)
-  if (typeof char.boldness === "number") {
-    if (char.boldness >= 70) traits.push("exceptionally brave");
-    else if (char.boldness >= 40) traits.push("brave");
-    else if (char.boldness >= 20) traits.push("somewhat brave");
-    else if (char.boldness <= -70) traits.push("extremely craven");
-    else if (char.boldness <= -40) traits.push("cowardly");
-    else if (char.boldness <= -20) traits.push("somewhat timid");
-  }
-  
-  // COMPASSION: Callous (-100) ↔ Kind (+100)
-  if (typeof char.compassion === "number") {
-    if (char.compassion >= 70) traits.push("exceptionally kind");
-    else if (char.compassion >= 40) traits.push("compassionate");
-    else if (char.compassion >= 20) traits.push("somewhat kind");
-    else if (char.compassion <= -70) traits.push("extremely callous");
-    else if (char.compassion <= -40) traits.push("cruel");
-    else if (char.compassion <= -20) traits.push("somewhat callous");
-  }
-  
-  // ENERGY: Lazy (-100) ↔ Diligent (+100)
-  if (typeof char.energy === "number") {
-    if (char.energy >= 70) traits.push("exceptionally diligent");
-    else if (char.energy >= 40) traits.push("hardworking");
-    else if (char.energy >= 20) traits.push("somewhat diligent");
-    else if (char.energy <= -70) traits.push("extremely lazy");
-    else if (char.energy <= -40) traits.push("slothful");
-    else if (char.energy <= -20) traits.push("somewhat lazy");
-  }
-  
-  // GREED: Generous (-100) ↔ Greedy (+100)
-  if (typeof char.greed === "number") {
-    if (char.greed >= 70) traits.push("exceptionally greedy");
-    else if (char.greed >= 40) traits.push("greedy");
-    else if (char.greed >= 20) traits.push("somewhat greedy");
-    else if (char.greed <= -70) traits.push("exceptionally generous");
-    else if (char.greed <= -40) traits.push("generous");
-    else if (char.greed <= -20) traits.push("somewhat generous");
-  }
-  
-  // HONOR: Deceitful (-100) ↔ Honest (+100)
-  if (typeof char.honor === "number") {
-    if (char.honor >= 70) traits.push("exceptionally honest");
-    else if (char.honor >= 40) traits.push("honorable");
-    else if (char.honor >= 20) traits.push("somewhat honest");
-    else if (char.honor <= -70) traits.push("extremely deceitful");
-    else if (char.honor <= -40) traits.push("dishonest");
-    else if (char.honor <= -20) traits.push("somewhat deceitful");
-  }
-  
-  // RATIONALITY: Emotional (-100) ↔ Logical (+100)
-  if (typeof char.rationality === "number") {
-    if (char.rationality >= 70) traits.push("exceptionally rational");
-    else if (char.rationality >= 40) traits.push("logical");
-    else if (char.rationality >= 20) traits.push("somewhat rational");
-    else if (char.rationality <= -70) traits.push("extremely emotional");
-    else if (char.rationality <= -40) traits.push("emotional");
-    else if (char.rationality <= -20) traits.push("somewhat emotional");
-  }
-  
-  // SOCIABILITY: Shy (-100) ↔ Gregarious (+100)
-  if (typeof char.sociability === "number") {
-    if (char.sociability >= 70) traits.push("exceptionally gregarious");
-    else if (char.sociability >= 40) traits.push("sociable");
-    else if (char.sociability >= 20) traits.push("somewhat outgoing");
-    else if (char.sociability <= -70) traits.push("extremely shy");
-    else if (char.sociability <= -40) traits.push("introverted");
-    else if (char.sociability <= -20) traits.push("somewhat shy");
-  }
-  
-  // VENGEFULNESS: Forgiving (-100) ↔ Vengeful (+100)
-  if (typeof char.vengefulness === "number") {
-    if (char.vengefulness >= 70) traits.push("exceptionally vengeful");
-    else if (char.vengefulness >= 40) traits.push("vengeful");
-    else if (char.vengefulness >= 20) traits.push("somewhat vengeful");
-    else if (char.vengefulness <= -70) traits.push("exceptionally forgiving");
-    else if (char.vengefulness <= -40) traits.push("forgiving");
-    else if (char.vengefulness <= -20) traits.push("somewhat forgiving");
-  }
-  
-  // ZEAL: Cynical (-100) ↔ Zealous (+100)
-  if (typeof char.zeal === "number") {
-    if (char.zeal >= 70) traits.push("exceptionally zealous");
-    else if (char.zeal >= 40) traits.push("zealous");
-    else if (char.zeal >= 20) traits.push("somewhat zealous");
-    else if (char.zeal <= -70) traits.push("extremely cynical");
-    else if (char.zeal <= -40) traits.push("cynical");
-    else if (char.zeal <= -20) traits.push("somewhat cynical");
-  }
-  
-  if (traits.length === 0) return null;
-  return `personality_core: ${traits.join(", ")}`;
-}
-
-function greediness(char) {
-  if (char.greed > 75) return "very greedy";
-  if (char.greed > 50) return "greedy";
-  if (char.greed > 25) return "slightly greedy";
-  if (char.greed < -25) return "generous";
-  return "neutral greed";
-}
-
-function opinionBreakdownLine(char, targetId, gameData) {
-  if (!char.opinionBreakdowns || char.opinionBreakdowns.length === 0) return null;
-  const targetBreakdown = char.opinionBreakdowns.find((ob) => ob.id === targetId);
-  if (!targetBreakdown || !targetBreakdown.breakdown) return null;
-  const list = targetBreakdown.breakdown
-    .map((m) => `${m.reason}: ${m.value > 0 ? "+" : ""}${m.value}`)
-    .join(", ");
-  return `opinion breakdown of ${gameData.characters.get(targetId).shortName}: ${list}`;
-}
-
-function listRelationsToCharacters(char, gameData) {
-  if (!char.relationsToCharacters || char.relationsToCharacters.length === 0) return null;
-  const lines = char.relationsToCharacters
-    .map((rel) => {
-      const targetChar = gameData.characters.get(rel.id);
-      if (targetChar) {
-        return `${targetChar.shortName} is ${rel.relations.join(", ")}`.replace("your", gameData.playerName + "'s").replace("of you", "of " + gameData.playerName);
-      }
-      return null;
-    })
-    .filter(Boolean);
-  return lines.length > 0 ? `relations of characters to ${char.fullName}: ${lines.join("; ")}` : null;
-}
-
-function secretsLine(char) {
-  if (!char.secrets || char.secrets.length === 0) return null;
-  const list = char.secrets
-    .map((s) => `${s.name} (${s.category}${s.isCriminal ? ", criminal" : ""}${s.isShunned ? ", shunned" : ""})`)
-    .join(", ");
-  return `this character secrets: ${list}`;
-}
-
-function knownSecretsLine(char) {
-  if (!char.knownSecrets || char.knownSecrets.length === 0) return null;
-  const list = char.knownSecrets
-    .map(
-      (s) =>
-        `${s.name} of ${s.ownerName} (${s.category}${s.isCriminal ? ", criminal" : ""}${
-          s.isShunned ? ", shunned" : ""
-        })`
-    )
-    .join(", ");
-  return `known secrets: ${list}`;
-}
-
-function troopsLine(char) {
-  if (!char.troops) return null;
-  const total = char.troops.totalOwnedTroops || 0;
-  const regiments = (char.troops.maaRegiments || [])
-    .filter((r) => r.isPersonal)
-    .map((r) => `${r.name}:${r.menAlive}`)
-    .join(", ");
-  return `troops: total ${total}, personal MAA: ${regiments}`;
-}
-
-function allMemoriesLine(char) {
-  if (!char.memories || char.memories.length === 0) return null;
-  const list = char.memories
-    .map((m) => `${m.creationDate} (${m.creationDateTotalDays}): ${m.type} - ${m.desc}`)
-    .join(" | ");
-  return `memories: ${list}`;
-}
-
-function familyLine(char) {
-  const parts = [];
-  if (char.parents && char.parents.length > 0) {
-    const parentsList = char.parents
-      .map((p) => `${p.name}${p.deathDate ? ` (died ${p.deathDate}${p.deathReason ? `: ${p.deathReason}` : ""})` : ""}`)
-      .join(", ");
-    parts.push(`parents of ${char.fullName}: ${parentsList}`);
-  }
-  if (char.siblings && char.siblings.length > 0) {
-    const siblingsList = char.siblings
-      .map((s) => {
-        const status = [s.sheHe === "he" ? "brother" : "sister", s.maritalStatus || "unmarried"]
-          .filter(Boolean)
-          .join(", ");
-        const death = s.deathDate ? `, died ${s.deathDate}${s.deathReason ? ` (${s.deathReason})` : ""}` : "";
-        const traits = (s.traits || []).map((t) => t.name).join(", ");
-        return `${s.name} (${status}${death}${traits ? `, traits: ${traits}` : ""})\n`;
-      })
-      .join(", ");
-    parts.push(`siblings of ${char.fullName}: ${siblingsList}`);
-  }
-  if (char.children && char.children.length > 0) {
-    const childrenList = char.children
-      .map((c) => {
-        const status = [c.sheHe === "he" ? "son" : "daughter", c.maritalStatus || "unmarried"]
-          .filter(Boolean)
-          .join(", ");
-        const death = c.deathDate ? `, died ${c.deathDate}${c.deathReason ? ` (${c.deathReason})` : ""}` : "";
-        const traits = (c.traits || []).map((t) => t.name).join(", ");
-        return `${c.name} (${status}${death}${traits ? `, traits: ${traits}` : ""})\n`;
-      })
-      .join(", ");
-    parts.push(`children of ${char.fullName}: ${childrenList}`);
-  }
-  return parts.length ? parts.join("; ") : null;
-}
-
-function conversationSummariesLine(char) {
-  if (!char.conversationSummaries || char.conversationSummaries.length === 0) return null;
-  const list = char.conversationSummaries.map((s) => `${s.date}: ${s.content}`).join(" | ");
-  return `conversation summaries: ${list}`;
-}
-
-
-
-    function getOpinionDescription(score) {
-        if (score > 60) return "devoted to";
-        if (score > 20) return "friendly toward";
-        if (score > -20) return "neutral toward";
-        if (score > -60) return "contempt toward";
-        return "hateful toward";
+function buildCharacterItems(char, gameData) {
+    const w = char.wh3;
+    const items = [];
+    items.push(`id(${char.id})`);
+    items.push(`name(${char.fullName})`);
+    if (!w) {
+        items.push(char.primaryTitle);
+        return items;
     }
-
-    function opinionOfPlayer(char) {
-        if (char.id === player.id) return null;
-        const desc = getOpinionDescription(char.opinionOfPlayer);
-        return `opinion_of_player(${desc})`;
+    const c = w.character;
+    const f = w.faction;
+    const isPlayer = char.id === gameData.playerID;
+    items.push(`role(${c.isFactionLeader ? `faction leader of ${f.name}` : `${TYPE_LABELS[c.typeKey] || c.typeKey} of ${f.name}`})`);
+    if (c.subtypeName) items.push(`kind(${c.subtypeName})`);
+    items.push(`race(${f.subcultureName || f.cultureName})`);
+    if (VOICES[f.subcultureKey]) items.push(`voice(${VOICES[f.subcultureKey]})`);
+    items.push(`gender(${c.isMale ? "male" : "female"})`);
+    if (c.age > 0) items.push(`age(${c.age})`);
+    items.push(`rank(${c.rank})`);
+    if (c.battlesFought > 0 || c.battlesWon > 0) items.push(`battles(won ${c.battlesWon}${c.battlesFought > 0 ? ` of ${c.battlesFought}` : ""})`);
+    if (c.isWounded) items.push("currently wounded");
+    if (char.traits && char.traits.length) items.push(`traits(${char.traits.map((t) => t.name).join(", ")})`);
+    if (char.liege) items.push(`serves(${char.liege})`);
+    if (c.regionName) items.push(`currently in(${c.regionName})`);
+    if (c.army) {
+        const units = c.army.units.map((u) => `${u.name} x${u.count}`).join(", ");
+        items.push(`army(${c.army.unitCount} unit slots${units ? `: ${units}` : ""}${c.army.heroes.length ? `; heroes: ${c.army.heroes.join(", ")}` : ""})`);
     }
-
-    function listOpinionsToCharacters(char, gameData) {
-        if (gameData.characters.size <= 2 || !char.opinions || char.opinions.length === 0) {
-            return null;
+    items.push(`faction(${f.name}: ${f.regionCount} settlements${f.capitalName ? `, capital ${f.capitalName}` : ""}, ${f.armyCount} armies, treasury ${Math.floor(f.treasury)} gold)`);
+    if (f.atWarWith && f.atWarWith.length) items.push(`faction at war with(${f.atWarWith.map((x) => x.name).join(", ")})`);
+    if (!isPlayer) {
+        if (gameData.wh3 && gameData.wh3.sameFaction) {
+            items.push(`relationship(serves the player's own faction)`);
+        } else {
+            items.push(`attitude towards player's faction(${char.opinionOfPlayer}, ${attitudeWord(char.opinionOfPlayer)})`);
         }
-        const lines = char.opinions
-            .map(opinionData => {
-                const targetCharacter = gameData.characters.get(opinionData.id);
-                // Exclude self and player (handled separately)
-                if (targetCharacter && targetCharacter.id !== char.id) {
-                    const desc = getOpinionDescription(opinionData.opinon);
-                    return `${char.shortName} seems ${desc} ${targetCharacter.shortName}`;
-                }
-                return null;
-            })
-            .filter(Boolean);
-            
-        return lines.length > 0 ? `opinions[${lines.join(' | ')}]` : null;
+    } else {
+        items.push("the player");
     }
+    return items;
+}
 
+function attitudeWord(n) {
+    if (n > 60) return "very friendly";
+    if (n > 20) return "friendly";
+    if (n > -20) return "indifferent";
+    if (n > -60) return "unfriendly";
+    return "hostile";
+}
 
-    
+function describeRelation(f) {
+    const parts = [];
+    if (f.atWarWithPlayer) parts.push("AT WAR");
+    if (f.alliedWithPlayer) parts.push("military allies");
+    if (f.isVassalOfPlayer) parts.push(`${f.name} is the player's vassal`);
+    if (f.isMasterOfPlayer) parts.push(`${f.name} is the player's overlord`);
+    if (f.tradingWithPlayer) parts.push("trade partners");
+    if (parts.length === 0) parts.push("no treaty");
+    parts.push(`their attitude to the player: ${f.attitudeToPlayer} (${attitudeWord(f.attitudeToPlayer)})`);
+    return parts.join(", ");
+}

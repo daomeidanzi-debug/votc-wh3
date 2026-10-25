@@ -1,5 +1,5 @@
-appId: com.mrandropc.votc
-productName: VOTC
+appId: com.votc.wh3
+productName: VOTC-WH3
 directories:
   buildResources: build
 asar: true
@@ -33,6 +33,7 @@ electronLanguages:
 files:
   - 'out/**'  # Include the output directory
   - 'default_userdata/**'  # Include default_userdata directory
+  - '!wh3_mod/**'
   # active-win misclassifies node-gyp as a runtime dep, but it only uses
   # prebuilt .node binaries — exclude the ~2MB build toolchain it drags in.
   - '!**/node_modules/node-gyp/**'
@@ -53,7 +54,7 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 
 win:
-  executableName: VOTC
+  executableName: VOTC-WH3
   icon: build/icon.ico
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
@@ -99,11 +100,10 @@ mac:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: github
-  owner: Voices-of-the-Court
-  repo: VOTC
-  private: false
-  releaseType: release
+# No update feed: the original feed would replace this port with the CK3 build.
+publish: null
+extraResources:
+  - from: wh3_mod/votc_wh3.pack
+    to: votc_wh3.pack
 # electronDownload:
 #   mirror: https://npmmirror.com/mirrors/electron/

@@ -1,109 +1,33 @@
-// Personality-based example messages. Returns an array of chat messages.
+// Warhammer III example exchange: one short greeting in the character's racial voice.
+// Returns an array of chat messages.
 
-/**@typedef {import('../../../src/main/gamedata_typedefs.js').GameData} GameData */
+/**@typedef {import('../../../gamedata_typedefs').GameData} GameData */
 /**@param {GameData} gameData */
 module.exports = (gameData, id) => {
     const ai = gameData.characters.get(id || gameData.aiID);
+    const player = gameData.characters.get(gameData.playerID);
+    if (!ai || !player || !ai.wh3) return [];
 
-    /**
-     * Build up to MAX_TRAITS personality-driven example exchanges.
-     */
-    const MAX_TRAITS = 5;
-    const msgs = [];
+    const line = GREETINGS[ai.wh3.faction.subcultureKey];
+    if (!line) return [];
 
-    // Normalize and filter personality traits
-    const normalizedTraits = (ai.traits || []).map(trait => {
-        if (typeof trait === 'string') {
-            return { name: trait, category: 'Personality Trait' };
-        }
-        return {
-            name: trait.name || '',
-            category: trait.category || ''
-        };
-    });
+    return [
+        { role: "user", name: player.shortName, content: "What do you want?" },
+        { role: "assistant", name: ai.shortName, content: line.replace(/\{player\}/g, player.shortName) },
+    ];
+};
 
-    const personalityTraits = normalizedTraits.filter(trait =>
-        trait.category && trait.category.toLowerCase().includes("personality")
-    );
-
-    if (personalityTraits.length === 0) {
-        return msgs;
-    }
-
-    const max = Math.min(MAX_TRAITS, personalityTraits.length);
-    for (let i = 0; i < max; i++) {
-        const trait = personalityTraits[i];
-        const detail = traitMessageMap.get(trait.name) || `this is part of who ${ai.shortName} is.`;
-        const prompts = [
-            "Personality?",
-            "Anything else?",
-            "Is that all?",
-            "And further?",
-            "One more?"
-        ];
-
-        msgs.push({
-            role: "user",
-            name: "Narrator",
-            content: prompts[Math.min(i, prompts.length - 1)]
-        });
-
-        const connector = i === 0 ? "Well, I am" : i === 1 ? "I am also" : "I am still";
-        const output = `*${ai.shortName}'s eyes light up* ${connector} ${trait.name}, ${detail}`;
-
-        msgs.push({
-            role: "assistant",
-            name: ai.shortName,
-            content: output
-        });
-    }
-
-    return msgs;
-}
-
-// custom trait descriptions
-const traitMessageMap = new Map([
-    ["Chaste", "I dislike intimate contact, I avoid the temptations of the flesh."],
-    ["Lustful", "Carnal desires burn hot in my core."],
-    ["Temperate", "I think it's best to enjoy things in moderation."],
-    ["Gluttonous", "I frown at moderation, I want it ALL!"],
-    ["Generous", "Acts of benevolence and charity are no strangers to me."],
-    ["Greedy", "I keep a tight grip on my purse and I always look for ways to engorge it."],
-    ["Diligent", "I do not shy away from hard work."],
-    ["Lazy", "The easiest road in life is the road most taken by me."],
-    ["Wrathful", "I am quick to anger and fury."],
-    ["Calm", "I take things in stride, I lead a slow-paced life."],
-    ["Impatient", "I think that most things should happen fast: ideally they should happen NOW!"],
-    ["Patient", "To wait and bide my time is my specialty."],
-    ["Humble", "I do not ask for much in life."],
-    ["Arrogant", "I have no problem with my sense of worth."],
-    ["Deceitful", "To lie and deceive is in my nature."],
-    ["Honest", "I value truth and sincerity highly."],
-    ["Craven", "I do not enjoy being challenged, or scared, at all."],
-    ["Brave", "Challenges or danger, I fear nothing."],
-    ["Shy", "I prefer to avoid interacting with other people."],
-    ["Gregarious", "I enjoy spending time with other people."],
-    ["Ambitious", "I know what I want, and I am not afraid to try and get it."],
-    ["Content", "What I already have, be it much or little, is enough for me."],
-    ["Arbitrary", "I do my own thing and I have little regard for others."],
-    ["Just", "I have a strong sense of justice."],
-    ["Cynical", "I trust the self-interest of others above all else."],
-    ["Zealous", "Religious conviction burns bright at the center of me."],
-    ["Paranoid", "I see enemies in every shadow."],
-    ["Trusting", "I am quick to place my faith in others."],
-    ["Compassionate", "Both merciful and sympathetic, I am warmhearted."],
-    ["Callous", "Being called both heartless and cold-blooded, I am indifferent to most."],
-    ["Sadistic", "Few things bring me as much joy as the suffering of others."],
-    ["Stubborn", "I do not back down for anything."],
-    ["Fickle", "I change my mind more often than not, making me hard to predict."],
-    ["Vengeful", "I am slow to forget a slight or someone who does me wrong."],
-    ["Forgiving", "I am quick to move on from most things."],
-    ["Eccentric", "My behavior is seen by others to be erratic and irrational."],
-    ["Rowdy", "I am always on the move, full of energy and mischief. When I am up to something, it is not uncommon for others to get hurt."],
-    ["Charming", "I certainly know how to wrap people around my little finger. I am sweet and amiable, which allows me to get away with almost anything."],
-    ["Curious", "There is rarely a silent moment with me. I constantly ask questions, I am curious about everything and everyone."],
-    ["Pensive", "I am often lost in thought, trying to understand the world around me. I often rely on books and systems to make sense of things."],
-    ["Bossy", "I can often be seen ordering other children around. While I am concerned with getting things done the right way, getting things done MY way is equally important."],
-    ["Loyal", "I take my relations more seriously than most."],
-    ["Disloyal", "Where most people see a relationship, I see an opportunity."],
-]);
+const GREETINGS = {
+    wh_main_sc_emp_empire: "*straightens his breastplate* Sigmar watches us both, {player}. Speak plainly - I have a province to hold and little patience for riddles.",
+    wh_main_sc_dwf_dwarfs: "*strokes his beard and squints* Hmph. Another one come to waste a dawi's time. Say your piece, {player}, and mind - I've a quill and a Book of Grudges close at hand.",
+    wh_main_sc_grn_greenskins: "*cracks knuckles* Oi! {player}! Ya got some fightin' fer me and da boyz, or ya just here to get krumped? Talk quick-like, WAAAGH don't wait!",
+    wh_main_sc_grn_savage_orcs: "*bares tusks under fresh warpaint* Wot? Ya want somefin', {player}? Gork sez talk is fer gits. Mork sez listen. So... talk. Den we fight.",
+    wh_main_sc_vmp_vampire_counts: "*regards you with a cold, unblinking stare* How quaint. The living still come to bargain. Do go on, {player} - I have all the time in the world. You do not.",
+    wh_dlc08_sc_nor_norsca: "*laughs, slamming a horn of mead down* Ha! {player} comes to the fire of the north! Speak, and if your words are weak, the Gods will hear of it.",
+    wh2_main_sc_skv_skaven: "*whiskers twitch, eyes darting* Yes-yes, {player}, most welcome-welcome! I am humble servant, very honest-trustworthy. What is it you want-need, hmm?",
+    wh3_main_sc_ogr_ogre_kingdoms: "*belly rumbles loudly* You got meat, {player}? No? Then you got gold. Either way, someone's getting eaten if this takes too long.",
+    wh3_main_sc_kho_khorne: "*growls through a skull-faced helm* Words. Always words. Spill them quickly, {player}, before I spill something else for the Blood God.",
+    wh3_main_sc_nur_nurgle: "*chuckles warmly, flies buzzing* Ah, {player}, come closer, come closer! Grandfather's gifts are for sharing. What brings you to my garden?",
+    wh3_main_sc_cth_cathay: "*bows with measured courtesy* May harmony guide our words, {player}. The Celestial Court has heard of you. What matter brings you before me?",
+    wh3_main_sc_ksl_kislev: "*brushes frost from her fur cloak* The cold does not wait, {player}, and neither do the hordes of the north. Say what you came to say.",
+};

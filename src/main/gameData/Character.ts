@@ -1,10 +1,14 @@
 import {Memory, Trait, OpinionModifier, Secret, KnownSecret, Modifier, Stress, Legitimacy, Troops, Law, Income, Treasury, Influence, Herd, Parent, Child, Sibling} from "./GameData"
+import type { Wh3Character, Wh3Faction } from "../wh3/types";
 import fs from 'fs';
 
 // Simple replacement for removeTooltip since parseLog.ts doesn't exist
 function removeTooltip(text: string): string {
-    return text.replace(/<.*?>.*?<\/.*?>/gi, '').trim();
+    return (text ?? '').replace(/<.*?>.*?<\/.*?>/gi, '').trim();
 }
+
+/** Number of fields the CK3 log line constructor reads. */
+const CHARACTER_FIELD_COUNT = 27;
 
 /** @class */
 export class Character {
@@ -71,6 +75,14 @@ export class Character {
 
     // Conversation summaries
     conversationSummaries: ConversationSummary[] = [];
+
+    /** Raw Warhammer III data from the game bridge (character + the faction they belong to). */
+    wh3?: { character: Wh3Character, faction: Wh3Faction };
+
+    /** A character with every field empty/zero, to be filled in by a game adapter. */
+    static blank(): Character {
+        return new Character(new Array(CHARACTER_FIELD_COUNT).fill(''));
+    }
 
 
     constructor(data: string[]){

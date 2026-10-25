@@ -215,7 +215,7 @@ const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = (props) => {
             <span className="selected-path">{appSettings.ck3UserFolderPath}</span>
           ) : (
             <span className="example-path-text">
-             <span className="example-highlight">{t('settings.egline')}</span> C:\Users\<span className="example-highlight">{t('settings.ck3UserFolderExample')}</span>\Documents\Paradox Interactive\Crusader Kings III <span className="example-highlight" style={{fontStyle: 'italic'}}>({t('settings.ck3UserFolderClickToSelect')})</span>
+             <span className="example-highlight">{t('settings.egline')}</span> C:\Program Files (x86)\Steam\steamapps\common\Total War WARHAMMER III <span className="example-highlight" style={{fontStyle: 'italic'}}>({t('settings.ck3UserFolderClickToSelect')})</span>
             </span>
           )}
         </div>

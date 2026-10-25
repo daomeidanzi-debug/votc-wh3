@@ -1,3 +1,5 @@
+> **Warhammer III port:** this fork targets Total War: WARHAMMER III. See [README_WH3.md](README_WH3.md) (中文) for installation and usage.
+
 # Voices of the Court 2.0
 
 A modern reimplementation of the Voices of the Court mod for Crusader Kings III, providing an enhanced AI-powered conversational experience with your characters.

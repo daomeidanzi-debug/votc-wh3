@@ -21,7 +21,7 @@ interface ActiveApp {
 
 /**
  * Monitors the currently focused window and determines if the app should be in overlay mode.
- * Overlay mode is active when CK3 or the app itself is focused.
+ * Overlay mode is active when Warhammer III or the app itself is focused.
  */
 export class FocusMonitor extends EventEmitter {
   private pollingTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -263,17 +263,15 @@ export class FocusMonitor extends EventEmitter {
   /**
    * Determine if the app should be in overlay mode based on the frontmost app.
    *
-   * CK3 detection is cross-platform:
-   *  - Windows: the `ck3.exe` process.
-   *  - macOS:   the "Crusader Kings III.app" bundle (path/name contains
-   *             'crusader kings iii' or 'ck3').
+   * Game detection (Windows only, like Warhammer III itself):
+   *  - the `Warhammer3.exe` process.
    */
   private shouldBeInOverlayMode(activeApp: ActiveApp): boolean {
     const name = activeApp.name.toLowerCase();
     const bundleId = activeApp.bundleId.toLowerCase();
     const appPath = activeApp.path.toLowerCase();
 
-    // --- CK3 (Windows + macOS) ---
+    // --- Warhammer III ---
     if (this.isCk3App(activeApp)) {
       return true;
     }
@@ -313,22 +311,19 @@ export class FocusMonitor extends EventEmitter {
   }
 
   /**
-   * Whether the given app is CK3 (Windows `ck3.exe` or the macOS `ck3.app`
-   * bundle / `Crusader Kings III` path). Shared by overlay-mode logic and
+   * Whether the given app is Total War: WARHAMMER III (`Warhammer3.exe`).
+   * Shared by overlay-mode logic and
    * {@link isGameFocused}.
    */
   private isCk3App(activeApp: ActiveApp): boolean {
+    // Total War: WARHAMMER III (Warhammer3.exe)
     const name = activeApp.name.toLowerCase();
-    const bundleId = activeApp.bundleId.toLowerCase();
     const appPath = activeApp.path.toLowerCase();
     return (
-      name.includes('ck3') ||
-      name.includes('crusader kings') ||
-      appPath.includes('ck3.exe') ||
-      appPath.includes('ck3') ||
-      appPath.includes('crusader kings iii') ||
-      bundleId.includes('ck3') ||
-      bundleId.includes('crusaderkings')
+      name.includes('warhammer3') ||
+      name.includes('warhammer iii') ||
+      appPath.endsWith('warhammer3.exe') ||
+      appPath.includes('total war warhammer iii')
     );
   }
 

@@ -1,6 +1,5 @@
 import { GameData, SummaryImportResult } from "../gameData/GameData";
 import { Character } from "../gameData/Character";
-import { parseLog, cleanLogFile } from "../gameData/parseLog";
 import { v4 } from "uuid";
 import { llmManager } from "../LLMManager";
 import { settingsRepository } from "../SettingsRepository";
@@ -9,7 +8,8 @@ import { ConversationEntry, Message, createError, createMessage, createActionFee
 import { PromptBuilder } from "./PromptBuilder";
 import { ActionEngine } from "../actions/ActionEngine";
 import { EventEmitter } from "events";
-import { runFileManager } from "../actions/RunFileManager";
+import { wh3Bridge, Wh3BridgeError } from "../wh3/Wh3Bridge";
+import { buildGameDataFromWh3, describeExportError } from "../wh3/buildGameData";
 import { shell } from "electron";
 import { TokenCounter, initializationService } from "../utils";
 import type { ActionInvocation } from "../actions/types";
@@ -69,94 +69,59 @@ export class Conversation {
     }> = new Map();
 
 
+    /** Settles once the first attempt to load game data has finished (successfully or not). */
+    ready: Promise<void>;
+
     constructor() {
         this.eventEmitter = new EventEmitter();
-        this.initializeGameData();
+        this.ready = this.initializeGameData();
     }
 
     private async initializeGameData(): Promise<void> {
-        // Ensure required files exist (votc.txt, letters.txt) and check for issues
+        // Check the Warhammer III folder and bridge files
         const fileResult = await initializationService.ensureRequiredFiles();
-        
-        // Handle any warnings from file creation
+
         for (const warning of fileResult.warnings) {
             if (warning.type === 'permission') {
                 console.error('Conversation.initializeGameData: Permission error:', warning.message);
-                const permError = createError({
+                this.messages.push(createError({
                     id: this.nextId++,
                     content: 'Permission Denied',
                     details: warning.suggestion || 'Please run the application as Administrator.'
-                });
-                this.messages.push(permError);
-            } else if (warning.type === 'ironman') {
-                console.warn('Conversation.initializeGameData: Iron Man mode detected:', warning.message);
-                const ironManWarning = createError({
-                    id: this.nextId++,
-                    content: 'Iron Man Save Detected',
-                    details: warning.suggestion || 'Iron Man saves do not support action execution. You can still have conversations, but game actions will not work.'
-                });
-                this.messages.push(ironManWarning);
-            } else if (warning.type === 'debug_log_missing') {
-                console.error('Conversation.initializeGameData: debug.log missing:', warning.message);
-                const debugLogError = createError({
-                    id: this.nextId++,
-                    content: 'Debug Log Not Found',
-                    details: warning.suggestion || 'The debug.log file is missing. Make sure CK3 has been launched at least once with debug mode enabled.'
-                });
-                this.messages.push(debugLogError);
-            } else if (warning.type === 'debug_log_unreadable') {
-                console.error('Conversation.initializeGameData: debug.log unreadable:', warning.message);
-                const debugLogError = createError({
-                    id: this.nextId++,
-                    content: 'Debug Log Not Readable',
-                    details: warning.suggestion || 'Permission denied while reading debug.log. Try running the application as Administrator.'
-                });
-                this.messages.push(debugLogError);
+                }));
             } else if (warning.type === 'path_not_found' || warning.type === 'path_detection') {
                 console.error('Conversation.initializeGameData: Path error:', warning.message);
-                const pathError = createError({
+                this.messages.push(createError({
                     id: this.nextId++,
-                    content: 'CK3 Path Not Found',
-                    details: warning.suggestion || 'Please configure the CK3 user folder path in settings.'
-                });
-                this.messages.push(pathError);
+                    content: 'Warhammer III Folder Not Found',
+                    details: warning.suggestion || 'Please select the Total War: WARHAMMER III install folder in settings.'
+                }));
             }
         }
-        
-        // If file creation failed completely, stop initialization
-        if (!fileResult.success && fileResult.warnings.some(w => w.type === 'permission' || w.type === 'path_not_found' || w.type === 'debug_log_missing' || w.type === 'debug_log_unreadable')) {
+
+        if (!fileResult.success) {
             this.isActive = false;
             this.emitUpdate();
             return;
         }
-        
-        const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
-        console.log(`Conversation.initializeGameData: CK3 debug log path: ${ck3DebugPath}`);
-        
-        // Only clear run file if it's available
-        if (runFileManager.isAvailable()) {
-            console.log('Conversation.initializeGameData: Clearing run file');
-            runFileManager.clear();
-        } else {
-            console.warn('Conversation.initializeGameData: RunFileManager not available - CK3 path not configured');
-        }
-        
-        if (!ck3DebugPath) {
-            console.error('Conversation.initializeGameData: CK3 debug log path is not configured');
-            this.isActive = false;
-            
-            const initError = createError({
-                id: this.nextId++,
-                content: 'CK3 debug log path is not configured',
-                details: 'Please configure the CK3 user folder path in settings'
-            });
-            this.messages.push(initError);
-            this.emitUpdate();
-            return;
-        }
-        
+
         try {
-            this.gameData = await parseLog(ck3DebugPath);
+            // Drop anything left over from a previous conversation before asking for fresh state
+            wh3Bridge.clear();
+            const lang = settingsRepository.getLanguage();
+            const state = await wh3Bridge.requestExport();
+            if (!state.ok) {
+                console.warn('Conversation.initializeGameData: export failed:', state.error);
+                this.isActive = false;
+                this.messages.push(createError({
+                    id: this.nextId++,
+                    content: lang === 'zh' ? '无法开始对话' : 'Cannot start conversation',
+                    details: describeExportError(state.error, lang)
+                }));
+                this.emitUpdate();
+                return;
+            }
+            this.gameData = buildGameDataFromWh3(state, lang);
             console.log('GameData initialized with', this.gameData.characters.size, 'characters');
             this.gameData.loadCharactersSummaries();
             
@@ -175,16 +140,19 @@ export class Conversation {
             } else {
                 this.frozenGameData = undefined;
             }
-            
+
             this.isActive = true;
+            this.emitUpdate();
         } catch (error) {
-            console.error('Failed to parse log file:', error);
+            console.error('Failed to read game state from Warhammer III:', error);
             this.isActive = false;
-            
+
             // Add initialization error message to conversation
             const initError = createError({
                 id: this.nextId++,
-                content: 'Failed to initialize conversation',
+                content: error instanceof Wh3BridgeError && error.code === 'timeout'
+                    ? 'Warhammer III is not responding'
+                    : 'Failed to initialize conversation',
                 details: error instanceof Error ? error.message : String(error)
             });
             this.messages.push(initError);
@@ -634,13 +602,13 @@ export class Conversation {
     async sendMessage(userMessage: string): Promise<void> {
         console.log('Conversation.sendMessage called with:', userMessage);
         console.log('Conversation active:', this.isActive);
-        console.log('Characters in conversation:', this.gameData.characters.size);
-
-        const user = this.gameData.characters.get(this.gameData.playerID)!;
-        if (!this.isActive) {
+        if (!this.isActive || !this.gameData) {
             console.warn('Conversation is not active');
             return;
         }
+        console.log('Characters in conversation:', this.gameData.characters.size);
+
+        const user = this.gameData.characters.get(this.gameData.playerID)!;
 
         if (this.gameData.characters.size === 0) {
             console.error('No characters in conversation');
@@ -765,8 +733,8 @@ export class Conversation {
         // Remove the error message
         this.messages.splice(targetIndex, 1);
         
-        // Check if this was an initialization error
-        if (targetError.content === 'Failed to initialize conversation') {
+        // Initialization errors (game not answering, nothing selected, ...) retry the game export
+        if (targetError.content === 'Failed to initialize conversation' || !this.isActive) {
             // Try to reinitialize
             await this.initializeGameData();
         } else {
@@ -837,14 +805,6 @@ export class Conversation {
     
     // Create final comprehensive summary and save to characters
     async finalizeConversation(): Promise<void> {
-        runFileManager.write(`
-            trigger_event = mcc_event_v2.9002
-            trigger_event = mcc_event_v2.9003
-            `);
-        setTimeout(() => {
-            runFileManager.clear();
-            console.log('Run file cleared after conversation end event.');
-        }, 500);
         if (this.messages.length < 2) {
             console.log('Not enough messages for final summarization');
             this.end();
@@ -919,7 +879,12 @@ export class Conversation {
     end(): void {
         this.isActive = false;
         this.clearHistory();
-        cleanLogFile(settingsRepository.getCK3DebugLogPath()!);
+    }
+
+    /** Show an error entry in the chat, e.g. a game action the bridge rejected. */
+    addSystemError(content: string, details?: string): void {
+        this.messages.push(createError({ id: this.nextId++, content, details }));
+        this.emitUpdate();
     }
 
     // Emit conversation update event

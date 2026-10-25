@@ -5,7 +5,7 @@ import { buildStructuredResponseJsonSchema } from "./jsonSchema";
 import { buildStructuredResponseSchema } from "./schema";
 import { llmManager } from "../LLMManager";
 import { ActionEffectWriter } from "./ActionEffectWriter";
-import { ActionArgumentValues, ActionInvocation, StructuredActionResponse, ActionExecutionResult } from "./types";
+import { ActionArgumentValues, ActionInvocation, StructuredActionResponse, ActionExecutionResult, GameCommand } from "./types";
 import { ActionPromptBuilder } from "./ActionPromptBuilder";
 import { healJsonResponseWithLogging } from "./responseHealing";
 import type { SchemaBuildInput } from "./jsonSchema";
@@ -317,17 +317,12 @@ export class ActionEngine {
     const userLang = settingsRepository.getLanguage();
 
     // console.log("Running action:", inv.actionId, { source: npc.id, target: targetId, args: inv.args });
-    const runGameEffect = (effectBody: string) => {
-      // In dry runs we avoid writing to the game run file
+    const runGameEffect = (command: GameCommand) => {
+      // In dry runs nothing is sent to the game
       if (options?.dryRun) {
         return;
       }
-      ActionEffectWriter.writeEffect(
-        conv.gameData,
-        npc.id,
-        targetId,
-        effectBody
-      );
+      ActionEffectWriter.writeEffect(command);
     };
 
     // Provide args as a plain object (name -> value); default to {}

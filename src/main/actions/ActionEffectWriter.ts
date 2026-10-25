@@ -1,110 +1,48 @@
-import { GameData } from "../gameData/GameData";
-import { runFileManager } from "./RunFileManager";
+import { wh3Bridge } from "../wh3/Wh3Bridge";
+import type { Wh3Command } from "../wh3/types";
+import type { GameCommand } from "./types";
+
+const KNOWN_OPS = new Set<Wh3Command['op']>([
+  'transfer_gold', 'attitude', 'war', 'peace', 'alliance', 'trade', 'vassal', 'confederate',
+  'transfer_region', 'add_trait', 'add_xp', 'wound', 'kill', 'replenish_ap', 'give_unit',
+]);
+
 /**
- * Utilities for composing and writing CK3 effects with proper source/target scoping.
- * Positions are 0-based to match the provided example and CK3 ordered_in_global_list usage.
+ * Sends action effects to Warhammer III through the votc_wh3 bridge.
+ * Actions pass a command object such as `{ op: "transfer_gold", from, to, amount }`
+ * (or its JSON string); the Lua side validates it again before executing.
  */
 export class ActionEffectWriter {
-  /**
-   * Compose CK3 prelude code to scope source/target characters from the ordered list.
-   * Uses:
-   *  - global_var:votc_action_source
-   *  - global_var:votc_action_target
-   */
-  static composeScopePrelude(sourceIndex: number | null | undefined, targetIndex?: number | null, isPlayerTarget?: boolean): string {
-    let prelude = "";
-
-    if (sourceIndex !== null && sourceIndex !== undefined) {
-      prelude += `
-ordered_in_global_list = {
-    variable = mcc_characters_list_v2
-    position = ${sourceIndex}
-    set_global_variable = {
-        name = votc_action_source
-        value = this
-    }
-}
-`;
-    }
-
-    if (targetIndex !== null && targetIndex !== undefined) {
-      if (isPlayerTarget) {
-        // Use 'root' scope for player target
-        prelude += `
-root = {
-    set_global_variable = {
-        name = votc_action_target
-        value = root
-    }
-}
-`;
-      } else {
-        // Regular target scoping
-        prelude += `
-ordered_in_global_list = {
-    variable = mcc_characters_list_v2
-    position = ${targetIndex}
-    set_global_variable = {
-        name = votc_action_target
-        value = this
-    }
-}
-`;
+  static parseCommand(command: GameCommand): Wh3Command {
+    let cmd: unknown = command;
+    if (typeof command === 'string') {
+      try {
+        cmd = JSON.parse(command);
+      } catch {
+        throw new Error(`Game effect must be a command object, got text: ${command.slice(0, 80)}`);
       }
     }
-
-    return prelude;
-  }
-
-  /**
-   * Compose final CK3 effect block including scope prelude and action effect text.
-   * Consumers can write this string into run file.
-   */
-  static composeFullEffect(
-    gameData: GameData,
-    sourceCharacterId: number,
-    targetCharacterId: number | null | undefined,
-    effectBody: string
-  ): string {
-    const sourceIndex = this.getCharacterIndex(gameData, sourceCharacterId);
-    const targetIndex = targetCharacterId != null ? this.getCharacterIndex(gameData, targetCharacterId) : null;
-    const isPlayerTarget = targetCharacterId != null && targetCharacterId === gameData.playerID;
-
-    const prelude = this.composeScopePrelude(sourceIndex, targetIndex, isPlayerTarget);
-    return `${prelude}\n${effectBody}\n`;
-  }
-
-  /**
-   * Write composed effect to run file (appends).
-   * Creates a RunFileManager using CK3 user folder path from SettingsRepository if not already created.
-   */
-  static writeEffect(
-    gameData: GameData,
-    sourceCharacterId: number,
-    targetCharacterId: number | null | undefined,
-    effectBody: string
-  ): void {
-    const effect = this.composeFullEffect(gameData, sourceCharacterId, targetCharacterId, effectBody);
-    // console.log(`Writing effect to run file: ${effect}`);
-    runFileManager.write(effect);
-    
-    // Clear runfile after 500ms
-    // setTimeout(() => {
-    //   runFileManager.clear();
-    // }, 500);
-  }
-
-  /**
-   * Compute 0-based position for character id in the ordered list.
-   * The GameData.characters Map is guaranteed to be in CK3 order.
-   */
-  static getCharacterIndex(gameData: GameData, characterId: number): number {
-    const ids = Array.from(gameData.characters.keys());
-    const idx = ids.indexOf(characterId);
-    if (idx === -1) {
-      throw new Error(`Character id ${characterId} not found in GameData.characters`);
+    if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) {
+      throw new Error('Game effect must be a command object');
     }
-    return idx;
+    const op = (cmd as { op?: unknown }).op;
+    if (typeof op !== 'string' || !KNOWN_OPS.has(op as Wh3Command['op'])) {
+      throw new Error(`Unknown game command op: ${String(op)}`);
+    }
+    for (const [key, value] of Object.entries(cmd as Record<string, unknown>)) {
+      const t = typeof value;
+      if (value !== null && value !== undefined && t !== 'string' && t !== 'number' && t !== 'boolean') {
+        throw new Error(`Game command field "${key}" must be a string, number or boolean`);
+      }
+      if (t === 'number' && !Number.isFinite(value as number)) {
+        throw new Error(`Game command field "${key}" is not a finite number`);
+      }
+    }
+    return cmd as Wh3Command;
   }
 
+  static writeEffect(command: GameCommand): void {
+    const cmd = this.parseCommand(command);
+    wh3Bridge.queueCommand(cmd);
+  }
 }

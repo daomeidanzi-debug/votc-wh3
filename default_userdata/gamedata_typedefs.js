@@ -1,4 +1,7 @@
 
+/** Per-campaign info stored next to the summaries; not a .json so it is never read as a summary file. */
+export const CAMPAIGN_INFO_FILE = "_campaign.meta";
+
 export interface SummaryImportResult {
   sourcePlayerId: string;
   characterId: number;
@@ -10,7 +13,20 @@ export interface SummaryImportResult {
 
 // Simple replacement for removeTooltip since parseLog.ts doesn't exist
 function removeTooltip(text: string): string {
-    return text.replace(/<.*?>.*?<\/.*?>/gi, '').trim();
+    return (text ?? '').replace(/<.*?>.*?<\/.*?>/gi, '').trim();
+}
+
+/** Warhammer III campaign context attached by the game bridge. */
+export type Wh3GameInfo = {
+    turn: number,
+    campaign: string,
+    /** stable id of the playthrough (from the savegame); summaries are stored per campaign id */
+    campaignId: string | null,
+    targetSource: string,
+    playerFaction: Wh3Faction,
+    /** the AI character's faction; equals playerFaction when talking to your own commander */
+    targetFaction: Wh3Faction,
+    sameFaction: boolean
 }
 
 
@@ -227,6 +243,13 @@ export class GameData {
     characters: Map<number,Character>
     letterData: LetterData | null;
 
+    wh3?: Wh3GameInfo;
+
+    /** Game data with every field empty/zero, to be filled in by a game adapter. */
+    static blank(): GameData {
+        return new GameData(new Array(9).fill(''));
+    }
+
     constructor(data: string[]){
             this.playerID = Number(data[0]),
             this.playerName = removeTooltip(data[1]),
@@ -254,16 +277,46 @@ export class GameData {
         return this.characters.get(this.aiID)!;
     }
 
+    /**
+     * Folder name under conversation_summaries. Warhammer III character ids are reused
+     * between campaigns, so history is keyed by the campaign id kept in the savegame;
+     * the player id is the fallback when the bridge provides none.
+     */
+    getSummariesKey(): string {
+        return this.wh3?.campaignId || this.playerID.toString();
+    }
+
+    private getSummariesPath(): string {
+        return path.join(VOTC_SUMMARIES_DIR, this.getSummariesKey());
+    }
+
+    /** Record which campaign a summaries folder belongs to (shown in the summaries manager). */
+    private writeCampaignInfo(summariesPath: string): void {
+        if (!this.wh3?.campaignId) return;
+        try {
+            fs.writeFileSync(path.join(summariesPath, CAMPAIGN_INFO_FILE), JSON.stringify({
+                campaignId: this.wh3.campaignId,
+                campaign: this.wh3.campaign,
+                playerName: this.playerName,
+                playerFaction: this.wh3.playerFaction.name,
+                lastTurn: this.wh3.turn,
+            }, null, '\t'));
+        } catch (error) {
+            console.warn('Failed to write campaign info:', error);
+        }
+    }
+
     loadCharactersSummaries(){
-        const summariesPath = path.join(VOTC_SUMMARIES_DIR, this.playerID.toString());
+        const summariesPath = this.getSummariesPath();
         for (const character of this.characters.values()) {
             character.loadSummaries(path.join(summariesPath, character.id.toString() + '.json'));
         }
     }
 
     saveCharacterSummary(characterId: number, summary: { date: string; totalDays: number; content: string }): void {
-        const summariesPath = path.join(VOTC_SUMMARIES_DIR, this.playerID.toString());
+        const summariesPath = this.getSummariesPath();
         fs.mkdirSync(summariesPath, { recursive: true });
+        this.writeCampaignInfo(summariesPath);
         const target = this.characters.get(characterId);
         if (!target) return;
         
@@ -278,8 +331,9 @@ export class GameData {
     }
 
     saveCharactersSummaries(finalSummary: string){
-        const summariesPath = path.join(VOTC_SUMMARIES_DIR, this.playerID.toString());
+        const summariesPath = this.getSummariesPath();
         fs.mkdirSync(summariesPath, { recursive: true });
+        this.writeCampaignInfo(summariesPath);
         for (const character of this.characters.values()) {
             character.conversationSummaries.unshift(
                 {
@@ -298,7 +352,13 @@ export class GameData {
      */
     async checkForSummariesFromOtherPlayers(): Promise<SummaryImportResult[]> {
         const results: SummaryImportResult[] = [];
-        
+
+        // Other folders are other campaigns; a character id there is a different character
+        // (ids are reused between campaigns), so never offer those summaries.
+        if (this.wh3?.campaignId) {
+            return results;
+        }
+
         try {
             // Ensure summaries directory exists
             if (!fs.existsSync(VOTC_SUMMARIES_DIR)) {
@@ -309,7 +369,7 @@ export class GameData {
             const playerDirs = fs.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true })
                 .filter(dirent => dirent.isDirectory())
                 .map(dirent => dirent.name)
-                .filter(playerId => playerId !== this.playerID.toString()); // Skip current player
+                .filter(playerId => playerId !== this.getSummariesKey()); // Skip current player
             
             // For each AI character in current conversation, check other player directories
             for (const character of this.characters.values()) {
@@ -331,7 +391,7 @@ export class GameData {
                             const summaryCount = Array.isArray(summaries) ? summaries.length : 0;
                             
                             if (summaryCount > 0) {
-                                const targetFilePath = path.join(VOTC_SUMMARIES_DIR, this.playerID.toString(), `${character.id}.json`);
+                                const targetFilePath = path.join(VOTC_SUMMARIES_DIR, this.getSummariesKey(), `${character.id}.json`);
                                 
                                 results.push({
                                     sourcePlayerId: otherPlayerId,
@@ -369,7 +429,7 @@ export class GameData {
         }
         
         const sourceFilePath = path.join(VOTC_SUMMARIES_DIR, sourcePlayerId, `${characterId}.json`);
-        const targetFilePath = path.join(VOTC_SUMMARIES_DIR, this.playerID.toString(), `${characterId}.json`);
+        const targetFilePath = path.join(VOTC_SUMMARIES_DIR, this.getSummariesKey(), `${characterId}.json`);
         
         try {
             // Ensure target directory exists
@@ -438,8 +498,11 @@ export class GameData {
 
 // Simple replacement for removeTooltip since parseLog.ts doesn't exist
 function removeTooltip(text: string): string {
-    return text.replace(/<.*?>.*?<\/.*?>/gi, '').trim();
+    return (text ?? '').replace(/<.*?>.*?<\/.*?>/gi, '').trim();
 }
+
+/** Number of fields the CK3 log line constructor reads. */
+const CHARACTER_FIELD_COUNT = 27;
 
 /** @class */
 export class Character {
@@ -506,6 +569,14 @@ export class Character {
 
     // Conversation summaries
     conversationSummaries: ConversationSummary[] = [];
+
+    /** Raw Warhammer III data from the game bridge (character + the faction they belong to). */
+    wh3?: { character: Wh3Character, faction: Wh3Faction };
+
+    /** A character with every field empty/zero, to be filled in by a game adapter. */
+    static blank(): Character {
+        return new Character(new Array(CHARACTER_FIELD_COUNT).fill(''));
+    }
 
 
     constructor(data: string[]){
