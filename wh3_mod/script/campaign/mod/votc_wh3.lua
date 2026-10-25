@@ -19,7 +19,7 @@
 -- is loaded with an empty environment, so it can only carry data.
 --------------------------------------------------------------------------------
 
-local VOTC_VERSION = "1.4.0"
+local VOTC_VERSION = "1.4.1"
 
 local STATE_FILE = "votc_state.json"
 local CMD_FILE = "votc_commands.lua"
@@ -46,7 +46,25 @@ local ALLOWED_TRAITS = {
 local CAMPAIGN_ID_KEY = "votc_campaign_id"
 
 local last_selected = nil -- { kind = "character", cqi = n } or { kind = "settlement", region = key }
-local last_processed_id = 0
+-- Command ids are digit strings, zero-padded to ID_WIDTH so they compare in numeric order.
+-- Warhammer III's Lua uses single-precision numbers (about 7 significant digits): the app's
+-- 16-digit ids, if stored as numbers, round together and later commands look already done.
+local ID_WIDTH = 20
+local last_processed_id = string.rep("0", ID_WIDTH)
+
+-- digit string (or a small integer) -> padded id string; nil for anything else
+local function normalize_id(id)
+	if type(id) == "number" then
+		if id ~= math.floor(id) or id < 0 then
+			return nil
+		end
+		id = string.format("%.0f", id)
+	end
+	if type(id) ~= "string" or not id:match("^%d+$") or #id > ID_WIDTH then
+		return nil
+	end
+	return string.rep("0", ID_WIDTH - #id) .. id
+end
 local last_cmd_raw = nil
 local started = false
 
@@ -1193,14 +1211,15 @@ function votc_poll_commands()
 
 	local results = new_array()
 	for _, cmd in ipairs(data.cmds) do
-		if type(cmd) == "table" and type(cmd.id) == "number" and cmd.id > last_processed_id then
-			last_processed_id = cmd.id
-			local ok, message
-			-- no age check: the game's os.time() drifts from the real clock, and replays are
-			-- already prevented by last_processed_id (the app also clears the file on start)
-			ok, message = execute_command(cmd)
-			log("cmd " .. string.format("%.0f", cmd.id) .. " " .. tostring(cmd.op) .. ": " .. (ok and "ok" or "FAILED") .. " - " .. message)
-			results[#results + 1] = { id = cmd.id, op = tostring(cmd.op), ok = ok, message = message }
+		local id = type(cmd) == "table" and normalize_id(cmd.id) or nil
+		-- equal-length digit strings compare in numeric order
+		if id and id > last_processed_id then
+			last_processed_id = id
+			-- no age check: replays are prevented by last_processed_id, and the app clears
+			-- the command file on start
+			local ok, message = execute_command(cmd)
+			log("cmd " .. id .. " " .. tostring(cmd.op) .. ": " .. (ok and "ok" or "FAILED") .. " - " .. message)
+			results[#results + 1] = { id = id, op = tostring(cmd.op), ok = ok, message = message }
 		end
 	end
 	if #results > 0 then
@@ -1210,7 +1229,9 @@ end
 
 local function restore_last_processed_id()
 	local raw = read_file(ACK_FILE)
-	local id = raw and tonumber(raw:match('"lastId":(%d+)'))
+	-- current acks store the id as a string; older ones as a number
+	local id = raw and (raw:match('"lastId":"(%d+)"') or raw:match('"lastId":(%d+)'))
+	id = normalize_id(id)
 	if id then
 		last_processed_id = id
 	end
@@ -1290,7 +1311,9 @@ function votc_wh3()
 	end, POLL_INTERVAL_MS, "votc_poll_commands")
 
 	write_ack(new_array())
-	log("bridge " .. VOTC_VERSION .. " started, last command id " .. string.format("%.0f", last_processed_id))
+	local single_precision = (16777216 + 1) == 16777216
+	log("bridge " .. VOTC_VERSION .. " started, last command id " .. last_processed_id
+		.. (single_precision and ", single-precision Lua numbers" or ""))
 end
 
 -- exposed for tests

@@ -123,7 +123,8 @@ export interface Wh3State {
 }
 
 export interface Wh3CommandResult {
-  id: number;
+  /** zero-padded digit string (numbers only from bridges before 1.4.1) */
+  id: string | number;
   op: string;
   ok: boolean;
   message: string;
@@ -131,7 +132,8 @@ export interface Wh3CommandResult {
 
 export interface Wh3Ack {
   version: string;
-  lastId: number;
+  /** zero-padded digit string (a number from bridges before 1.4.1) */
+  lastId: string | number;
   results: Wh3CommandResult[];
   time?: number;
 }

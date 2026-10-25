@@ -87,7 +87,7 @@ const { toLua, luaString, buildCommandFile } = load('wh3/luaSerialize.js');
 const { buildGameDataFromWh3, describeExportError, WH3_TRAITS } = load('wh3/buildGameData.js');
 const { ActionEffectWriter } = load('actions/ActionEffectWriter.js');
 const { ActionSandbox } = load('actions/ActionSandbox.js');
-const { Wh3Bridge } = load('wh3/Wh3Bridge.js');
+const { Wh3Bridge, formatId } = load('wh3/Wh3Bridge.js');
 const { parseSteamLibraryFolders, Wh3PathDetector, isWh3GameDir } = load('wh3/Wh3PathDetector.js');
 const { initializationService } = load('utils/InitializationService.js');
 
@@ -413,7 +413,7 @@ function pickArgs(argDefs) {
   // write the command file exactly as Wh3Bridge would, plus an export for the e2e check
   const now = Math.floor(Date.now() / 1000);
   let nextId = Date.now() * 1000;
-  const fileCmds = [{ op: 'export', reqId: 'e2e' }, ...collected].map((c) => ({ ...c, id: nextId++, ts: now }));
+  const fileCmds = [{ op: 'export', reqId: 'e2e' }, ...collected].map((c) => ({ ...c, id: formatId(nextId++), ts: now }));
   fs.writeFileSync(commandsOut, buildCommandFile(fileCmds), 'utf-8');
   console.log(`wrote ${fileCmds.length} commands to ${commandsOut}`);
 
@@ -421,15 +421,16 @@ function pickArgs(argDefs) {
     fs.writeFileSync(path.join(GAME_DIR, 'Warhammer3.exe'), '');
     fs.mkdirSync(path.join(GAME_DIR, 'data'), { recursive: true });
     const bridge = new Wh3Bridge();
-    // fake game: answer exports, ack everything, fail one op
-    let lastId = 0;
+    // fake game: answer exports, ack everything, fail one op. Like the real bridge it
+    // compares ids as padded strings (the game's Lua numbers are single precision).
+    let lastId = '0'.repeat(20);
     const game = setInterval(() => {
       let raw;
       try { raw = fs.readFileSync(path.join(GAME_DIR, 'votc_commands.lua'), 'utf-8'); } catch { return; }
       const results = [];
       for (const m of raw.matchAll(/\{ ([^{}]*) \}/g)) {
         const body = m[1];
-        const id = Number((body.match(/id = (\d+)/) || [])[1]);
+        const id = (body.match(/id = "(\d{20})"/) || [])[1];
         const op = (body.match(/op = "(\w+)"/) || [])[1];
         if (!id || id <= lastId) continue;
         lastId = id;
@@ -448,7 +449,9 @@ function pickArgs(argDefs) {
       bridge.on('command-failed', (r) => failed.push(r));
       const a = bridge.queueCommand({ op: 'peace', a: 'x', b: 'y' });
       const b = bridge.queueCommand({ op: 'kill', cqi: 2 });
-      check(b > a, 'command ids increase');
+      check(typeof a === 'string' && a.length === 20 && b > a, 'command ids are increasing 20-digit strings');
+      check(/id = "\d{20}"/.test(fs.readFileSync(path.join(GAME_DIR, 'votc_commands.lua'), 'utf-8')), 'ids are written to the game as strings');
+      check(formatId(1792920675942400) === '00001792920675942400' && formatId('42') === '00000000000000000042' && formatId('x') === '', 'formatId pads digits and rejects anything else');
       await new Promise((r) => setTimeout(r, 1500));
       check(failed.length === 1 && failed[0].op === 'kill' && failed[0].message === 'nope', 'failed command reported once');
       const file = fs.readFileSync(path.join(GAME_DIR, 'votc_commands.lua'), 'utf-8');

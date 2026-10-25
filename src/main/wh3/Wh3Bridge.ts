@@ -20,7 +20,19 @@ const PENDING_TTL_MS = 60 * 60 * 1000;
 const MAX_BACKGROUND_WAIT_MS = 3 * 60 * 1000;
 const DIAGNOSTIC_MAX_BYTES = 256 * 1024;
 
-type PendingCommand = Record<string, LuaValue> & { id: number; ts: number; op: string };
+/**
+ * Command ids travel as zero-padded digit strings: Warhammer III's Lua stores numbers as
+ * single-precision floats, which would round 16-digit ids together. Equal-length digit
+ * strings compare in numeric order on both sides.
+ */
+export const ID_WIDTH = 20;
+
+export function formatId(id: number | string): string {
+  const digits = typeof id === 'number' ? Math.round(id).toString() : id.trim();
+  return /^\d+$/.test(digits) ? digits.padStart(ID_WIDTH, '0') : '';
+}
+
+type PendingCommand = Record<string, LuaValue> & { id: string; ts: number; op: string };
 
 export class Wh3BridgeError extends Error {
   constructor(public code: string, message: string) {
@@ -82,9 +94,9 @@ export class Wh3Bridge extends EventEmitter {
   }
 
   /** Queue a command for the game. Returns its id. */
-  queueCommand(command: Wh3Command): number {
+  queueCommand(command: Wh3Command): string {
     this.dropExpired();
-    const cmd = { ...(command as Record<string, LuaValue>), id: this.nextId(), ts: Math.floor(Date.now() / 1000) } as PendingCommand;
+    const cmd = { ...(command as Record<string, LuaValue>), id: formatId(this.nextId()), ts: Math.floor(Date.now() / 1000) } as PendingCommand;
     this.pending.push({ cmd, queuedAt: Date.now() });
     this.writeCommandFile();
     this.ensureAckWatcher();
@@ -140,14 +152,17 @@ export class Wh3Bridge extends EventEmitter {
 
   private checkAck(): void {
     const ack = this.readAck();
-    if (ack && typeof ack.lastId === 'number') {
-      const acked = this.pending.filter((p) => p.cmd.id <= ack.lastId);
+    const lastId = ack && (typeof ack.lastId === 'string' || typeof ack.lastId === 'number') ? formatId(ack.lastId) : '';
+    if (ack && lastId) {
+      const acked = this.pending.filter((p) => p.cmd.id <= lastId);
       if (acked.length > 0) {
-        this.pending = this.pending.filter((p) => p.cmd.id > ack.lastId);
+        this.pending = this.pending.filter((p) => p.cmd.id > lastId);
         const results = Array.isArray(ack.results) ? ack.results : [];
         for (const p of acked) {
-          const result: Wh3CommandResult = results.find((r) => r.id === p.cmd.id)
-            ?? { id: p.cmd.id, op: p.cmd.op, ok: true, message: 'acknowledged' };
+          const found = results.find((r) => formatId(r.id) === p.cmd.id);
+          const result: Wh3CommandResult = found
+            ? { ...found, id: p.cmd.id }
+            : { id: p.cmd.id, op: p.cmd.op, ok: true, message: 'acknowledged' };
           this.emit('result', result);
           if (p.cmd.op !== 'export') this.diagnostic(`result ${result.op} #${result.id}: ${result.ok ? 'ok' : 'FAILED'} ${result.message}`);
           if (!result.ok) {

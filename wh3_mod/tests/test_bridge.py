@@ -79,10 +79,10 @@ def main():
     print('startup')
     L = fresh(workdir)
     check(L.globals().mock.listeners['CharacterSelected'] is not None, 'CharacterSelected listener registered')
-    check(os.path.exists('votc_ack.json') and ack()['lastId'] == 0, 'startup ack written with lastId 0')
+    check(os.path.exists('votc_ack.json') and int(ack()['lastId']) == 0, 'startup ack written with lastId 0')
 
     print('export without selection')
-    write_cmds('return { cmds = { { id = 1, ts = %d, op = "export", reqId = "r1" } } }' % now)
+    write_cmds('return { cmds = { { id = "100", ts = %d, op = "export", reqId = "r1" } } }' % now)
     poll(L)
     st = json.load(open('votc_state.json', encoding='utf-8'))
     check(st['ok'] is False and st['error'] == 'nothing_selected', 'reports nothing_selected')
@@ -90,7 +90,7 @@ def main():
 
     print('export after selecting the orc warboss')
     L.execute('mock.listeners["CharacterSelected"]({ character = function() return grim end })')
-    write_cmds('return { cmds = { { id = 2, ts = %d, op = "export", reqId = "r2" } } }' % now)
+    write_cmds('return { cmds = { { id = "200", ts = %d, op = "export", reqId = "r2" } } }' % now)
     poll(L)
     raw = open('votc_state.json', 'rb').read()
     st = json.loads(raw.decode('utf-8'))
@@ -112,7 +112,7 @@ def main():
     import re
     check(isinstance(cid, str) and cid.startswith('wh_main_emp_empire_') and re.fullmatch(r'[A-Za-z0-9_-]+', cid) is not None, 'campaign id created and filesystem-safe: %r' % cid)
     check(L.eval('mock.saved_values.votc_campaign_id') == cid, 'campaign id stored as a saved value (goes into the savegame)')
-    write_cmds('return { cmds = { { id = 2.5, ts = %d, op = "export", reqId = "r2b" } } }' % now)
+    write_cmds('return { cmds = { { id = "250", ts = %d, op = "export", reqId = "r2b" } } }' % now)
     poll(L)
     check(json.load(open('votc_state.json', encoding='utf-8'))['campaignId'] == cid, 'campaign id stable across exports')
     # loading a save of the same campaign: a new VM whose saved values come from the save
@@ -145,14 +145,14 @@ def main():
         modlord = mock.add_character(4, orcs, { forename = "names_name_grimgor", subtype = "my_mod_lord" })
     ''')
     L.execute('mock.listeners["CharacterSelected"]({ character = function() return grim end })')
-    write_cmds('return { cmds = { { id = 2.6, ts = %d, op = "export", reqId = "lore1" } } }' % now)
+    write_cmds('return { cmds = { { id = "260", ts = %d, op = "export", reqId = "lore1" } } }' % now)
     poll(L)
     st = json.load(open('votc_state.json', encoding='utf-8'))
     check(st['target']['typeDescription'] == 'Orc Warbosses rule through brute force.', 'type description read via cco, markup stripped')
     check(st['target']['biography'] == '格里姆格·铁皮是最强大的黑兽人。', 'biography read via cco')
     check('biography' not in st['player'] and 'typeDescription' not in st['player'], 'no lore -> fields omitted')
     L.execute('mock.listeners["CharacterSelected"]({ character = function() return modlord end })')
-    write_cmds('return { cmds = { { id = 2.7, ts = %d, op = "export", reqId = "lore2" } } }' % now)
+    write_cmds('return { cmds = { { id = "270", ts = %d, op = "export", reqId = "lore2" } } }' % now)
     poll(L)
     raw = open('votc_state.json', 'rb').read()
     st = json.loads(raw.decode('utf-8'))  # strict UTF-8 decode: fails if truncation split a character
@@ -162,21 +162,21 @@ def main():
 
     print('export of own hero (empty forename falls back to subtype)')
     L.execute('mock.listeners["CharacterSelected"]({ character = function() return hero end })')
-    write_cmds('return { cmds = { { id = 3, ts = %d, op = "export", reqId = "r3" } } }' % now)
+    write_cmds('return { cmds = { { id = "300", ts = %d, op = "export", reqId = "r3" } } }' % now)
     poll(L)
     st = json.load(open('votc_state.json', encoding='utf-8'))
     check(st['ok'] and st['target']['name'] == 'wh_main_emp_captain' and 'targetFaction' not in st, 'own hero exported without targetFaction')
 
     print('selecting yourself')
     L.execute('mock.listeners["CharacterSelected"]({ character = function() return karl end })')
-    write_cmds('return { cmds = { { id = 4, ts = %d, op = "export", reqId = "r4" } } }' % now)
+    write_cmds('return { cmds = { { id = "400", ts = %d, op = "export", reqId = "r4" } } }' % now)
     poll(L)
     st = json.load(open('votc_state.json', encoding='utf-8'))
     check(st['error'] == 'target_is_player', 'target_is_player error')
 
     print('settlement selection -> owner faction leader')
     L.execute('mock.listeners["SettlementSelected"]({ garrison_residence = function() return { region = function() return badlands end } end })')
-    write_cmds('return { cmds = { { id = 5, ts = %d, op = "export", reqId = "r5" } } }' % now)
+    write_cmds('return { cmds = { { id = "500", ts = %d, op = "export", reqId = "r5" } } }' % now)
     poll(L)
     st = json.load(open('votc_state.json', encoding='utf-8'))
     check(st['ok'] and st['target']['cqi'] == 2 and st['targetSource'] == 'settlement', 'settlement resolves to warboss')
@@ -184,7 +184,7 @@ def main():
     next_id = [6.0]
     def export(label):
         next_id[0] += 0.01
-        write_cmds('return { cmds = { { id = %.2f, ts = %d, op = "export", reqId = "%s" } } }' % (next_id[0], now, label))
+        write_cmds('return { cmds = { { id = "%d", ts = %d, op = "export", reqId = "%s" } } }' % (round(next_id[0] * 100), now, label))
         poll(L)
         return json.load(open('votc_state.json', encoding='utf-8'))
 
@@ -284,36 +284,36 @@ def main():
     L.execute('mock.click(mock.ui_component({ CcoCampaignCharacter = "3" }))')
     st = export('hero1')
     check(st['ok'] and st['target']['cqi'] == 3 and st['targetSource'] == 'selection', 'clicking a hero card selects the hero')
-    write_cmds('return { cmds = { { id = 6.9, ts = %d, op = "kill", cqi = -%d } } }' % (now, 5003))
+    write_cmds('return { cmds = { { id = "690", ts = %d, op = "kill", cqi = -%d } } }' % (now, 5003))
     poll(L)
     check(ack()['results'][0]['ok'] is False, 'character commands never match a unit id')
 
     print('actions')
     write_cmds('return { cmds = {'
-               '{ id = 10, ts = %d, op = "transfer_gold", from = "wh_main_grn_greenskins", to = "wh_main_emp_empire", amount = 200 },'
-               '{ id = 11, ts = %d, op = "transfer_gold", from = "wh_main_grn_greenskins", to = "wh_main_emp_empire", amount = 99999 },'
-               '{ id = 12, ts = %d, op = "attitude", a = "wh_main_emp_empire", b = "wh_main_grn_greenskins", amount = 3 },'
-               '{ id = 13, ts = %d, op = "attitude", a = "wh_main_emp_empire", b = "wh_main_grn_greenskins", amount = 9 },'
-               '{ id = 14, ts = %d, op = "war", a = "wh_main_grn_greenskins", b = "wh_main_emp_empire" },'
-               '{ id = 15, ts = %d, op = "peace", a = "wh_main_grn_greenskins", b = "wh_main_emp_empire" },'
-               '{ id = 16, ts = %d, op = "add_trait", cqi = 2, trait = "wh2_main_trait_pacifist" },'
-               '{ id = 17, ts = %d, op = "add_trait", cqi = 2, trait = "evil_custom_trait" },'
-               '{ id = 18, ts = %d, op = "give_unit", fromCqi = 1, toCqi = 2, unit = "wh_main_emp_inf_swordsmen" },'
-               '{ id = 19, ts = %d, op = "give_unit", fromCqi = 1, toCqi = 2, unit = "wh_main_emp_lord" },'
-               '{ id = 20, ts = %d, op = "transfer_region", region = "black_crag", from = "wh_main_grn_greenskins", to = "wh_main_emp_empire" },'
-               '{ id = 21, ts = %d, op = "kill", cqi = 1 },'
-               '{ id = 22, ts = %d, op = "kill", cqi = 2 },'
-               '{ id = 23, ts = %d, op = "launch_missiles" },'
-               '{ id = 24, ts = %d, op = "wound", cqi = 999, turns = 2 },'
-               '{ id = 25, ts = %d, op = "add_xp", cqi = 2, levels = 2 },'
-               '{ id = 26, ts = %d, op = "replenish_ap", cqi = 2 },'
-               '{ id = 27, ts = %d, op = "alliance", a = "wh_main_grn_greenskins", b = "wh_main_emp_empire" },'
-               '{ id = 28, ts = %d, op = "vassal", master = "wh_main_emp_empire", vassal = "wh_main_grn_greenskins" },'
-               '{ id = 29, ts = %d, op = "confederate", absorber = "wh_main_grn_greenskins", absorbed = "wh_main_emp_empire" },'
+               '{ id = "1000", ts = %d, op = "transfer_gold", from = "wh_main_grn_greenskins", to = "wh_main_emp_empire", amount = 200 },'
+               '{ id = "1100", ts = %d, op = "transfer_gold", from = "wh_main_grn_greenskins", to = "wh_main_emp_empire", amount = 99999 },'
+               '{ id = "1200", ts = %d, op = "attitude", a = "wh_main_emp_empire", b = "wh_main_grn_greenskins", amount = 3 },'
+               '{ id = "1300", ts = %d, op = "attitude", a = "wh_main_emp_empire", b = "wh_main_grn_greenskins", amount = 9 },'
+               '{ id = "1400", ts = %d, op = "war", a = "wh_main_grn_greenskins", b = "wh_main_emp_empire" },'
+               '{ id = "1500", ts = %d, op = "peace", a = "wh_main_grn_greenskins", b = "wh_main_emp_empire" },'
+               '{ id = "1600", ts = %d, op = "add_trait", cqi = 2, trait = "wh2_main_trait_pacifist" },'
+               '{ id = "1700", ts = %d, op = "add_trait", cqi = 2, trait = "evil_custom_trait" },'
+               '{ id = "1800", ts = %d, op = "give_unit", fromCqi = 1, toCqi = 2, unit = "wh_main_emp_inf_swordsmen" },'
+               '{ id = "1900", ts = %d, op = "give_unit", fromCqi = 1, toCqi = 2, unit = "wh_main_emp_lord" },'
+               '{ id = "2000", ts = %d, op = "transfer_region", region = "black_crag", from = "wh_main_grn_greenskins", to = "wh_main_emp_empire" },'
+               '{ id = "2100", ts = %d, op = "kill", cqi = 1 },'
+               '{ id = "2200", ts = %d, op = "kill", cqi = 2 },'
+               '{ id = "2300", ts = %d, op = "launch_missiles" },'
+               '{ id = "2400", ts = %d, op = "wound", cqi = 999, turns = 2 },'
+               '{ id = "2500", ts = %d, op = "add_xp", cqi = 2, levels = 2 },'
+               '{ id = "2600", ts = %d, op = "replenish_ap", cqi = 2 },'
+               '{ id = "2700", ts = %d, op = "alliance", a = "wh_main_grn_greenskins", b = "wh_main_emp_empire" },'
+               '{ id = "2800", ts = %d, op = "vassal", master = "wh_main_emp_empire", vassal = "wh_main_grn_greenskins" },'
+               '{ id = "2900", ts = %d, op = "confederate", absorber = "wh_main_grn_greenskins", absorbed = "wh_main_emp_empire" },'
                '} }' % tuple([now] * 20))
     poll(L)
-    res = {r['id']: r for r in ack()['results']}
-    check(ack()['lastId'] == 29, 'lastId advanced to 29')
+    res = {int(r['id']) / 100: r for r in ack()['results']}
+    check(int(ack()['lastId']) == 2900, 'lastId advanced to 29')
     expect = {10: True, 11: False, 12: True, 13: False, 14: True, 15: True, 16: True, 17: False, 18: True, 19: False,
               20: True, 21: False, 22: True, 23: False, 24: False, 25: True, 26: True, 27: True, 28: True, 29: False}
     for i, ok in expect.items():
@@ -334,17 +334,45 @@ def main():
     poll(L)
     check(len(calls(L)) == n_before, 'already processed ids are not executed again')
 
+    print('ids are strings: no float rounding (the game uses single-precision numbers)')
+    # Under float32 these two app ids round to the same number; as strings they stay distinct.
+    import struct
+    as_f32 = lambda x: struct.unpack('f', struct.pack('f', x))[0]
+    a, b = 1792920661104000, 1792920699161000
+    check(as_f32(a) == as_f32(b), 'sanity: these ids collide as single-precision floats')
+    L2f = LuaRuntime(unpack_returned_tuples=True)
+    L2f.execute(open(os.path.join(HERE, 'mock_wh3.lua'), encoding='utf-8').read())
+    L2f.execute(open(MOD, encoding='utf-8').read())
+    L2f.execute('pf = mock.add_faction("wh_main_emp_empire", { human = true, treasury = 100 }); mock.local_faction = pf; of = mock.add_faction("wh_main_grn_greenskins", { treasury = 100 })')
+    L2f.globals().votc_wh3()
+    write_cmds('return { cmds = { { id = "%020d", op = "transfer_gold", from = "wh_main_grn_greenskins", to = "wh_main_emp_empire", amount = 5 }, { id = "%020d", op = "transfer_gold", from = "wh_main_grn_greenskins", to = "wh_main_emp_empire", amount = 7 } } }' % (a, b))
+    L2f.globals().mock.real_callbacks['votc_poll_commands']()
+    check(L2f.eval('pf:treasury()') == 112, 'both close-together commands executed')
+    check(ack()['lastId'] == '%020d' % b and [r['id'] for r in ack()['results']] == ['%020d' % a, '%020d' % b], 'ack carries exact string ids')
+    write_cmds('return { cmds = { { id = "%020d", op = "transfer_gold", from = "wh_main_grn_greenskins", to = "wh_main_emp_empire", amount = 1 } } }' % a)
+    L2f.globals().mock.real_callbacks['votc_poll_commands']()
+    check(L2f.eval('pf:treasury()') == 112, 'an older id is not executed again')
+    saved_ack = open('votc_ack.json', encoding='utf-8').read()
+    open('votc_ack.json', 'w').write('{"lastId":1792920675942400,"results":[]}')  # written by bridge 1.4.0
+    L3 = LuaRuntime(unpack_returned_tuples=True)
+    L3.execute(open(os.path.join(HERE, 'mock_wh3.lua'), encoding='utf-8').read())
+    L3.execute(open(MOD, encoding='utf-8').read())
+    L3.execute('pf = mock.add_faction("wh_main_emp_empire", { human = true }); mock.local_faction = pf')
+    L3.globals().votc_wh3()
+    check(L3.eval('votc_wh3_internal.get_last_processed_id()') == '00001792920675942400', 'numeric lastId from an older bridge is read after upgrading')
+    open('votc_ack.json', 'w', encoding='utf-8').write(saved_ack)
+
     print('timestamps far from the game clock still run (os.time drifts in game)')
-    write_cmds('return { cmds = { { id = 30, ts = %d, op = "treasury_mod" }, { id = 31, ts = %d, op = "transfer_gold", from = "wh_main_emp_empire", to = "wh_main_grn_greenskins", amount = 1 } } }' % (now, now - 7200))
+    write_cmds('return { cmds = { { id = "3000", ts = %d, op = "treasury_mod" }, { id = "3100", ts = %d, op = "transfer_gold", from = "wh_main_emp_empire", to = "wh_main_grn_greenskins", amount = 1 } } }' % (now, now - 7200))
     poll(L)
-    res = {r['id']: r for r in ack()['results']}
+    res = {int(r['id']) / 100: r for r in ack()['results']}
     check(res[31]['ok'] is True, 'command with an old timestamp executed')
     check(res[30]['ok'] is False and 'unknown op' in res[30]['message'], 'unknown op still rejected')
 
     print('export never fails silently')
     L.execute('karl.faction = function() error("boom from the game") end')
     L.execute('mock.listeners["CharacterSelected"]({ character = function() return grim end })')
-    write_cmds('return { cmds = { { id = 32, ts = %d, op = "export", reqId = "boom" } } }' % now)
+    write_cmds('return { cmds = { { id = "3200", ts = %d, op = "export", reqId = "boom" } } }' % now)
     poll(L)
     st = json.load(open('votc_state.json', encoding='utf-8'))
     check(st['reqId'] == 'boom' and st['ok'] is False and 'internal' in st['error'] and 'boom' in st['error'], 'script error during export is reported: %s' % st.get('error'))
@@ -357,22 +385,22 @@ def main():
         iron_rock = mock.add_region("iron_rock", orcs)
         mock.listeners["SettlementSelected"]({ garrison_residence = function() return { region = function() return iron_rock end } end })
     ''')
-    write_cmds('return { cmds = { { id = 33, ts = %d, op = "export", reqId = "city" } } }' % now)
+    write_cmds('return { cmds = { { id = "3300", ts = %d, op = "export", reqId = "city" } } }' % now)
     poll(L)
     st = json.load(open('votc_state.json', encoding='utf-8'))
     check(st['ok'] and st['sceneRegionKey'] == 'iron_rock' and st['sceneRegionName'] == '铁岩', 'scene region is the clicked settlement: %s' % st.get('sceneRegionName'))
     check(st['sceneIsCapital'] is False and st['target']['cqi'] == 2, 'not the capital; talking to its owner')
 
     print('sandboxing and malformed files')
-    write_cmds('return { cmds = { { id = 40, ts = %d, op = "export", reqId = tostring(io) } } }' % now)
+    write_cmds('return { cmds = { { id = "4000", ts = %d, op = "export", reqId = tostring(io) } } }' % now)
     poll(L)
-    check(ack()['lastId'] == 33, 'command file cannot call globals (eval error, nothing run)')
-    write_cmds('return { cmds = { { id = 41, ts = %d, op = "exp')
+    check(int(ack()['lastId']) == 3300, 'command file cannot call globals (eval error, nothing run)')
+    write_cmds('return { cmds = { { id = "4100", ts = %d, op = "exp')
     poll(L)
-    check(ack()['lastId'] == 33, 'truncated file is ignored')
-    write_cmds('return { cmds = { { id = 41, ts = %d, op = "export", reqId = "r41" } } }' % now)
+    check(int(ack()['lastId']) == 3300, 'truncated file is ignored')
+    write_cmds('return { cmds = { { id = "4100", ts = %d, op = "export", reqId = "r41" } } }' % now)
     poll(L)
-    check(ack()['lastId'] == 41, 'complete file processed after truncated one')
+    check(int(ack()['lastId']) == 4100, 'complete file processed after truncated one')
 
     print('reload restores last id')
     L2 = LuaRuntime(unpack_returned_tuples=True)
@@ -380,7 +408,7 @@ def main():
     L2.execute(open(MOD, encoding='utf-8').read())
     L2.execute('player = mock.add_faction("wh_main_emp_empire", { human = true }); mock.local_faction = player')
     L2.globals().votc_wh3()
-    check(L2.eval('votc_wh3_internal.get_last_processed_id()') == 41, 'last id restored from ack file')
+    check(int(L2.eval('votc_wh3_internal.get_last_processed_id()')) == 4100, 'last id restored from ack file')
     L2.globals().mock.real_callbacks['votc_poll_commands']()
     check(len(calls(L2)) == 0, 'commands from before the reload are not replayed')
 
@@ -425,7 +453,7 @@ def make_fixtures(out_dir):
     for name, select in selectors:
         L = fresh(tempfile.mkdtemp(prefix='votc_fx_'))
         L.execute(select)
-        write_cmds('return { cmds = { { id = 1, ts = %d, op = "export", reqId = "fixture" } } }' % now)
+        write_cmds('return { cmds = { { id = "100", ts = %d, op = "export", reqId = "fixture" } } }' % now)
         poll(L)
         with open('votc_state.json', 'rb') as src, open(os.path.join(out_dir, name), 'wb') as dst:
             dst.write(src.read())
