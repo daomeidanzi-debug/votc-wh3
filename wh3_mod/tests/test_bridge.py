@@ -236,7 +236,7 @@ def main():
     check(len(calls(L)) == n_before, 'already processed ids are not executed again')
 
     print('stale commands')
-    write_cmds('return { cmds = { { id = 30, ts = %d, op = "treasury_mod" }, { id = 31, ts = %d, op = "transfer_gold", from = "wh_main_emp_empire", to = "wh_main_grn_greenskins", amount = 1 } } }' % (now, now - 3600))
+    write_cmds('return { cmds = { { id = 30, ts = %d, op = "treasury_mod" }, { id = 31, ts = %d, op = "transfer_gold", from = "wh_main_emp_empire", to = "wh_main_grn_greenskins", amount = 1 } } }' % (now, now - 7200))
     poll(L)
     res = {r['id']: r for r in ack()['results']}
     check(res[31]['ok'] is False and 'stale' in res[31]['message'], 'old command ignored as stale')

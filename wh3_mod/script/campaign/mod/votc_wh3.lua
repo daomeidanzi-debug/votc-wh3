@@ -19,13 +19,15 @@
 -- is loaded with an empty environment, so it can only carry data.
 --------------------------------------------------------------------------------
 
-local VOTC_VERSION = "1.2.0"
+local VOTC_VERSION = "1.2.1"
 
 local STATE_FILE = "votc_state.json"
 local CMD_FILE = "votc_commands.lua"
 local ACK_FILE = "votc_ack.json"
 local POLL_INTERVAL_MS = 400
-local STALE_COMMAND_SECONDS = 120
+-- the game only polls while it has focus, so actions chosen during a long chat wait for the
+-- player to return; only commands older than this (e.g. left over from a crash) are dropped
+local STALE_COMMAND_SECONDS = 3600
 local MAX_UNITS_PER_ARMY = 20
 
 -- Traits that exist for every culture (no culture restriction in character_traits).

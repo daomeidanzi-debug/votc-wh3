@@ -1269,12 +1269,25 @@ app.on('ready', async () => {
       chatWindow = createWindow();
     }
 
-    conversationManager.createConversation();
+    const conversation = conversationManager.createConversation();
 
-    // Show window (it might be hidden) and send events to renderer
-    chatWindow.show();
-    chatWindow.focus();
-    chatWindow.webContents.send('chat-reset'); // This will trigger showChat in App.tsx
+    // Warhammer III stops running script timers while it is in the background, so the
+    // game must keep focus until it has answered the export request. Show the window
+    // without activating it, and take focus only once the game data has arrived.
+    const window = chatWindow;
+    window.showInactive();
+    window.webContents.send('chat-reset'); // This will trigger showChat in App.tsx
+    const focusChat = () => {
+      if (!window.isDestroyed()) {
+        window.show();
+        window.focus();
+      }
+    };
+    if (conversation) {
+      conversation.ready.then(focusChat, focusChat);
+    } else {
+      focusChat();
+    }
   };
 
   // Report actions the game rejected (e.g. not enough gold, character already dead)

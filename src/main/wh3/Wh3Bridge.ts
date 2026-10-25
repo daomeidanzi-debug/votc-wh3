@@ -6,11 +6,16 @@ import { settingsRepository } from '../SettingsRepository';
 import { buildCommandFile, LuaValue } from './luaSerialize';
 import { WH3_FILES, Wh3Ack, Wh3Command, Wh3CommandResult, Wh3State } from './types';
 
-const EXPORT_TIMEOUT_MS = 8000;
+// generous: the game only runs script timers while it has focus
+const EXPORT_TIMEOUT_MS = 20000;
 const POLL_MS = 150;
 const ACK_POLL_MS = 400;
-/** Unacknowledged commands are dropped after this; the bridge treats them as stale anyway. */
-const PENDING_TTL_MS = 90_000;
+/**
+ * Unacknowledged commands are dropped after this. Actions chosen while the chat window has
+ * focus only run once the player returns to the game, which can take a long conversation.
+ * Keep in sync with STALE_COMMAND_SECONDS in votc_wh3.lua.
+ */
+const PENDING_TTL_MS = 60 * 60 * 1000;
 
 type PendingCommand = Record<string, LuaValue> & { id: number; ts: number; op: string };
 
@@ -182,7 +187,7 @@ export class Wh3Bridge extends EventEmitter {
           try { this.writeCommandFile(); } catch { /* ignore */ }
           reject(new Wh3BridgeError(
             'timeout',
-            'The game did not answer. Make sure Warhammer III is running a single-player campaign with the votc_wh3 mod enabled, and that the campaign map is loaded (not paused in a menu).'
+            'The game did not answer. Make sure Warhammer III is running a single-player campaign with the votc_wh3 mod enabled, the campaign map is loaded, and the game window is in front when you press the hotkey (the game pauses its scripts in the background). Click the retry button to try again.'
           ));
         }
       }, POLL_MS);
