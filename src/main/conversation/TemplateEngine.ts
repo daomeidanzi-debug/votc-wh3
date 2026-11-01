@@ -84,7 +84,18 @@ export class TemplateEngine {
     // How a character speaks: {{speechStyle gameData id}} (see speechStyle.ts)
     Handlebars.registerHelper('speechStyle', (gameData: GameData, id: number) => {
       const c = gameData?.characters?.get?.(id);
-      return speechStyle(gameData?.game ?? '', c, (gameData as any)?.worldMods);
+      const gd = gameData as any;
+      const pc = gd?.pdx?.playerCountry;
+      const player = gameData?.playerName
+        ? {
+          name: gameData.playerName,
+          // Paradox: the country's leader title; CK3 / Total War: the player character's own title
+          title: (pc ? pc.leaderTitle : gameData.characters?.get?.(gameData.playerID)?.primaryTitle) || undefined,
+          country: pc?.name || undefined,
+          government: pc?.government || undefined,
+        }
+        : undefined;
+      return speechStyle(gameData?.game ?? '', c, gd?.worldMods, player);
     });
 
     Handlebars.registerHelper('formatRelations', (relations: string[]) => {

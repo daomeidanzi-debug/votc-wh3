@@ -30,7 +30,7 @@ const ERA: Record<string, string> = {
 
 /** What their job does to how they talk. */
 const ROLE: Rule[] = [
-  { match: /ruler|head of state|faction leader|king|queen|emperor|leader|统治者|国家元首|派系领袖|君主|皇帝|国王|领袖/i, style: 'You speak for your whole realm: weigh every word, use the royal or official "we" when it suits you, expect deference.' },
+  { match: /ruler|head of state|faction leader|king|queen|emperor|leader|统治者|国家元首|派系领袖|君主|皇帝|国王|领袖/i, style: 'You speak for your whole country: weigh every word, speak for your government when it suits you, expect deference.' },
   { match: /field marshal|marshal|general|commander|admiral|lord\b|元帅|将军|将领|指挥官|海军上将|领主/i, style: 'You are a soldier: clipped, practical, talk of men, supplies, terrain and enemies; impatient with politics.' },
   { match: /advisor|minister|official|chancellor|secretary|diplomat|governor|顾问|部长|大臣|官员|总督|外交/i, style: 'You are an official: careful, measured, hedge your promises, mind protocol and your own standing.' },
   { match: /scientist|scholar|engineer|inventor|科学家|学者|工程师/i, style: 'You are a thinker: curious, precise, reach for evidence and analogies, a little detached.' },
@@ -107,8 +107,35 @@ function rulesFor(text: string, rules: Rule[], max: number): string[] {
   return found;
 }
 
+/** Who the player is, for forms of address. */
+export interface PlayerAddress {
+  name: string;
+  /** their office in the game's words, when known (e.g. "Chancellor", "King") */
+  title?: string;
+  /** their country / faction */
+  country?: string;
+  /** government or ideology of their country */
+  government?: string;
+}
+
+/** Only monarchs are "Your Majesty" (characters called Hitler that). */
+const MONARCH = /monarch|king|queen|emperor|empress|tsar|czar|sultan|shah|kaiser|royal|crown|君主|国王|女王|皇帝|女皇|沙皇|苏丹|王室|帝制/i;
+const NOT_MONARCH = /fascis|nazi|communis|socialis|bolshev|democra|republic|president|prime minister|chancellor|dictator|junta|法西斯|纳粹|共产|社会主义|布尔什维克|民主|共和|总统|首相|总理|独裁|军政府/i;
+
+function addressLine(p: PlayerAddress): string {
+  const office = [p.title || (p.country ? 'the leader' : ''), p.country && !(p.title ?? '').includes(p.country) ? `of ${p.country}` : '', p.government ? `(${p.government})` : '']
+    .filter(Boolean).join(' ');
+  const known = `${p.title ?? ''} ${p.government ?? ''}`;
+  const honorific = MONARCH.test(known)
+    ? 'Royal honorifics fit them, as your rank and relation allow.'
+    : NOT_MONARCH.test(known)
+      ? 'They are no monarch: never "Your Majesty". A dictator is addressed by their own title (Führer, Duce, Caudillo, Leader...), a president or prime minister as such, a communist leader as General Secretary, Chairman or Comrade.'
+      : 'Use the honorific their office calls for: "Your Majesty" only for a crowned monarch, never for a dictator, president or prime minister.';
+  return `Address ${p.name} by what they really are${office ? `: ${office}` : ''}. ${honorific} Match it to your relation with them (your own leader, an ally, a rival, an enemy).`;
+}
+
 /** The speaking style of one character, as prompt lines ('' when nothing is known). */
-export function speechStyle(game: string, c: Character | undefined, world?: WorldMods): string {
+export function speechStyle(game: string, c: Character | undefined, world?: WorldMods, player?: PlayerAddress): string {
   if (!c) return '';
   const any = c as unknown as Record<string, any>;
   const person = any.pdx?.person;
@@ -147,6 +174,7 @@ export function speechStyle(game: string, c: Character | undefined, world?: Worl
   if (c.age && c.age >= 60) lines.push('You are old: unhurried, reminiscent, impatient with the young.');
   else if (c.age && c.age < 20) lines.push('You are young: eager, less guarded, sometimes rash.');
   if (people && !peoples) lines.push(`Your people and culture (${people}) shape your idioms, proverbs and what you take for granted.`);
+  if (player?.name && !(c as unknown as { pdx?: { isPlayer?: boolean } }).pdx?.isPlayer) lines.push(addressLine(player));
   lines.push('Your voice is your own: do not sound like other characters or like a modern assistant. Vary sentence length; use the vocabulary, forms of address and turns of phrase your background calls for, in whatever language you reply in.');
   return lines.map((l) => `- ${l}`).join('\n');
 }

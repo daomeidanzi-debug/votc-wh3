@@ -120,7 +120,14 @@ function parse(lines) {
     const marshal = speechStyle('hoi4', ch({ pdx: { person: { title: 'Field Marshal', facts: { ideology: '法西斯主义' } }, country: { government: 'Fascism', facts: {} } } }));
     const fdr = speechStyle('hoi4', ch({ isRuler: true, pdx: { person: { title: 'Head of State', facts: { ideology: '自由主义' } }, country: { government: '民主主义', facts: {} } } }));
     check(/soldier/.test(marshal) && /Fascist/.test(marshal) && /1930s/.test(marshal), 'a fascist field marshal: soldier and fascist voice');
-    check(/whole realm/.test(fdr) && /democratic/.test(fdr) && !/Fascist/.test(fdr), 'a democratic head of state sounds different');
+    check(/whole country/.test(fdr) && /democratic/.test(fdr) && !/Fascist/.test(fdr) && !/royal/i.test(fdr), 'a democratic head of state sounds different');
+    // forms of address: a dictator is no "Your Majesty", a king is
+    const toHitler = speechStyle('hoi4', ch({ pdx: { person: { title: 'General', facts: {} }, country: { government: '法西斯主义', facts: {} } } }), undefined, { name: '希特勒', country: '德国', government: '法西斯主义' });
+    const toKing = speechStyle('ck3', ch({}), undefined, { name: 'Louis', title: 'King of France' });
+    check(/Address 希特勒 by what they really are: the leader of 德国 \(法西斯主义\)/.test(toHitler) && /never "Your Majesty"/.test(toHitler) && /Führer/.test(toHitler), 'a fascist leader is not addressed as Your Majesty');
+    check(/Royal honorifics fit them/.test(toKing) && !/never "Your Majesty"/.test(toKing), 'a king is');
+    const toUnknown = speechStyle('vic3', ch({}), undefined, { name: 'Victoria', country: 'Great Britain' });
+    check(/only for a crowned monarch/.test(toUnknown) && !/They are no monarch/.test(toUnknown), 'an unknown office gets the neutral rule');
     const hive = speechStyle('stellaris', ch({ isRuler: true, pdx: { person: { title: 'Ruler', facts: {} }, country: { government: 'Hive Mind', facts: { ethics: 'Gestalt Consciousness' } } } }));
     check(/say "we"/.test(hive) && /spacefaring/.test(hive), 'a Stellaris hive mind says "we"');
     const orc = speechStyle('wh3', ch({ culture: '绿皮', titleRankConcept: 'Lord', personality: 'Cruel' }));
@@ -229,6 +236,8 @@ function parse(lines) {
     }
     const hoiOn = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_hoi4', 'common', 'on_actions', 'votc_on_actions.txt'), 'utf-8');
     const hoiGui = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_hoi4', 'common', 'scripted_guis', 'votc_scripted_guis.txt'), 'utf-8');
+    const hoiFx = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_hoi4', 'common', 'scripted_effects', 'votc_scripted_effects.txt'), 'utf-8');
+    check(/votc_talk_from_top_bar = \{[\s\S]*?every_country = \{\s*limit = \{ votc_is_relevant_country = yes \}\s*votc_log_country_characters = yes/.test(hoiFx), 'hoi4: the top-bar talk sends the people of every country in the snapshot');
     check(/on_daily = \{[\s\S]*country_event = votc_cmd\.1/.test(hoiOn) && (hoiGui.match(/votc_apply_actions = yes/g) || []).length === 2, 'hoi4: the daily pulse and both buttons fire the command event');
     const stelOn = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_stellaris', 'common', 'on_actions', 'votc_on_actions.txt'), 'utf-8');
     const stelDec = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_stellaris', 'common', 'decisions', 'votc_decisions.txt'), 'utf-8');

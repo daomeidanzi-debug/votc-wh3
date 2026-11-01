@@ -85,11 +85,17 @@ votc_snapshot_talk_country = {
 	log = "VOTC|END"
 }
 
-# The "VOTC" button of the top bar. THIS = the player: the snapshot and the player's own people.
+# The "VOTC" button of the top bar. THIS = the player: the snapshot, the player's own people and
+# the people (leader, advisors, commanders) of every country in the snapshot, so the app can offer
+# them all; any other country's people come with its diplomacy view's Talk button.
 votc_talk_from_top_bar = {
 	votc_snapshot_head = yes
 	log = "VOTC|META|talk|pick"
 	votc_log_country_characters = yes
+	every_country = {
+		limit = { votc_is_relevant_country = yes }
+		votc_log_country_characters = yes
+	}
 	log = "VOTC|END"
 }
 
