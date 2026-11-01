@@ -1,0 +1,19 @@
+﻿# VOTC Bridge (GPL-3.0, see LICENSE.txt): applies the actions the VOTC app queued.
+# The runner (gui/votc_runner.gui) executes this scripted GUI; like a player's click it is
+# sent to the game and its effect runs in the game's own thread, paused or not. (A console
+# `event` from the GUI races the simulation for the random generator and crashes the game.)
+# votc_has_pending (common/scripted_triggers/votc_pending_triggers.txt) is rewritten by the
+# app and reloaded by the -debug_mode file watcher: yes while some command has not run yet.
+
+votc_apply_sgui = {
+	scope = country
+
+	is_valid = {
+		is_player = yes
+		votc_has_pending = yes
+	}
+
+	effect = {
+		trigger_event = { id = votc_cmd.1 }
+	}
+}

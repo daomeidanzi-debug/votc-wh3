@@ -177,10 +177,19 @@ function parse(lines) {
     check(/votc_cmd\.1 = \{/.test(vic3Empty) && !vic3Empty.includes('VOTC|ACK'), 'vic3: the event exists even with nothing queued');
     check(PDX_PROFILES.vic3.runCommand === 'event votc_cmd.1' && PDX_PROFILES.vic3.runFiles.user[0].replace(/\\/g, '/') === 'mod/votc_vic3/events/votc_commands.txt', 'vic3: the event file lives in the mod');
     const runner = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'gui', 'votc_runner.gui'), 'utf-8');
-    check(runner.includes("ExecuteConsoleCommand('event votc_cmd.1')") && !runner.includes("ExecuteConsoleCommand('run"), 'vic3: the timer fires the event');
-    // a console event while the game runs crashes Victoria 3 ("Random is blocked by thread"):
-    // the console only while paused, the monthly pulse while time runs, no typing by the app
-    check(/visible = "\[And\(GetPlayer\.IsValid, TimeKeeper\.IsPaused\)\]"/.test(runner), 'vic3: the console timer runs only while the game is paused');
+    // a console event crashes Victoria 3 whenever another game thread holds the random
+    // generator ("Random is blocked by thread"), paused or not: no console at all. The runner
+    // executes a scripted GUI (run in the game thread like a click) while something is pending.
+    check(!runner.includes('ExecuteConsoleCommand'), 'vic3: the runner uses no console command');
+    check(runner.includes("GetScriptedGui('votc_apply_sgui').Execute(GuiScope.SetRoot(GetPlayer.MakeScope).End)")
+      && /visible = "\[And\(GetPlayer\.IsValid, GetScriptedGui\('votc_apply_sgui'\)\.IsValid\(GuiScope\.SetRoot\(GetPlayer\.MakeScope\)\.End\)\)\]"/.test(runner), 'vic3: the runner executes the scripted GUI, only while something is pending');
+    const sgui = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'scripted_guis', 'votc_sguis.txt'), 'utf-8');
+    check(/votc_apply_sgui = \{[\s\S]*scope = country[\s\S]*votc_has_pending = yes[\s\S]*trigger_event = \{ id = votc_cmd\.1 \}/.test(sgui), 'vic3: the scripted GUI fires the command event when something is pending');
+    const { extraRunFiles } = load('games/paradox/commands.js');
+    const pendingEmpty = extraRunFiles('vic3', [])['mod/votc_vic3/common/scripted_triggers/votc_pending_triggers.txt'];
+    const pendingOne = extraRunFiles('vic3', [{ seq: 41, op: 'opinion', compiled: { effect: 'x' } }, { seq: 42, op: 'money', compiled: { effect: 'y' } }])['mod/votc_vic3/common/scripted_triggers/votc_pending_triggers.txt'];
+    check(/votc_has_pending = \{\n\talways = no\n\}/.test(pendingEmpty) && /global_var:votc_seq < 42/.test(pendingOne) && !Object.keys(extraRunFiles('hoi4', [])).length, 'vic3: the pending trigger follows the queue');
+    check(fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'scripted_triggers', 'votc_pending_triggers.txt'), 'utf-8').replace(/^﻿/, '').replace(/\r/g, '') === pendingEmpty, 'vic3: the shipped trigger file equals an empty queue');
     const onActions = fs.readdirSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'on_actions')).map((f) => fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'on_actions', f), 'utf-8')).join('\n');
     check(/trigger_event = \{ id = votc_cmd\.1 \}/.test(onActions), 'vic3: the monthly pulse applies the actions in the game thread');
     check(PDX_PROFILES.vic3.consoleTyping === false && PDX_PROFILES.eu5.consoleTyping !== false, 'vic3: the app never types into the console');

@@ -1,7 +1,7 @@
 {
   "name": "votc-multi",
   "productName": "VOTC Multi",
-  "version": "2.0.12",
+  "version": "2.0.13",
   "description": "Voices of the Court for CK3, Total War: WARHAMMER III, Total War: THREE KINGDOMS, Hearts of Iron IV, Victoria 3, Europa Universalis V and Stellaris - talk to rulers and heroes with an LLM and let them act in your campaign",
   "main": "out/main/main.js",
   "scripts": {

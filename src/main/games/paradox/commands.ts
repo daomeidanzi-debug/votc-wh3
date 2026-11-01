@@ -592,6 +592,27 @@ function vic3EventFile(queue: QueuedCommand[]): string {
   ].join('\n');
 }
 
+/** Victoria 3: the mod's runner applies commands only while this trigger is true. */
+export const VIC3_PENDING_FILE = 'mod/votc_vic3/common/scripted_triggers/votc_pending_triggers.txt';
+
+/**
+ * Files besides the run file, relative to the user folder. Victoria 3: votc_has_pending is
+ * true until the newest queued command has run (the event stores its sequence number), so
+ * the runner stops once everything is applied.
+ */
+export function extraRunFiles(game: PdxGame, queue: QueuedCommand[]): Record<string, string> {
+  if (game !== 'vic3') return {};
+  const lines = ['# Written by the VOTC app: yes while some queued action has not run. Do not edit.', 'votc_has_pending = {'];
+  if (!queue.length) {
+    lines.push('\talways = no');
+  } else {
+    const last = Math.max(...queue.map((q) => q.seq));
+    lines.push('\tOR = {', '\t\tNOT = { has_global_variable = votc_seq }', `\t\tglobal_var:votc_seq < ${last}`, '\t}');
+  }
+  lines.push('}', '');
+  return { [VIC3_PENDING_FILE]: lines.join('\n') };
+}
+
 /** One guarded command, as a single line of script. */
 export function guardedScript(game: PdxGame, q: QueuedCommand): string {
   const result = q.compiled.check

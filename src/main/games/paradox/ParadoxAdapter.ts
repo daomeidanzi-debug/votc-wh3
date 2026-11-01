@@ -7,7 +7,7 @@ import { findSteamGame, paradoxUserDir, exists, testWritable } from '../steam';
 import type {
   FolderDetection, GameAdapter, GameSetupWarning, LoadOptions, LoadResult, TalkTarget, WindowInfo,
 } from '../types';
-import { buildRunFile, compileCommand, PdxCommand, QueuedCommand } from './commands';
+import { buildRunFile, compileCommand, extraRunFiles, PdxCommand, QueuedCommand } from './commands';
 import { buildGameDataFromPdx, personTargetId, talkTargets } from './buildGameData';
 import type { PdxProfile } from './profiles';
 import { personKey, SnapshotParser } from './snapshot';
@@ -426,12 +426,16 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
 
   private writeRunFiles(): void {
     const content = buildRunFile(this.profile.id, this.pending);
-    for (const file of this.runFilePaths()) {
+    const files: Array<[string, string]> = this.runFilePaths().map((f) => [f, content]);
+    // Victoria 3: the trigger the mod's runner checks before applying anything
+    const dir = this.userDir();
+    if (dir) for (const [rel, text] of Object.entries(extraRunFiles(this.profile.id, this.pending))) files.push([path.join(dir, rel), text]);
+    for (const [file, text] of files) {
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
         // write and rename, so the game (or its file watcher) never reads half a file
         const tmp = `${file}.tmp`;
-        fs.writeFileSync(tmp, content, 'utf-8');
+        fs.writeFileSync(tmp, text, 'utf-8');
         fs.renameSync(tmp, file);
       } catch (error) {
         // the install folder may be read-only; the user folder copy is enough
