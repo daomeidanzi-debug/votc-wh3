@@ -7,7 +7,6 @@ votc_cmd.1 = {
 	title = empty_text
 	desc = empty_text
 	hidden = yes
-	orphan = yes
 	trigger = {
 		always = no
 	}

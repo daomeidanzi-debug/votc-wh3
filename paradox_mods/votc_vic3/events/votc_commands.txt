@@ -4,7 +4,6 @@ namespace = votc_cmd
 votc_cmd.1 = {
 	type = country_event
 	hidden = yes
-	orphan = yes
 	trigger = {
 		always = no
 	}

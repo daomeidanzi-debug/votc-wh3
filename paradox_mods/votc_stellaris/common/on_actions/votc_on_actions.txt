@@ -8,5 +8,8 @@ on_game_start_country = {
 on_monthly_pulse_country = {
 	events = {
 		votc.1
+		# the actions the VOTC app queued (events/votc_commands.txt, rewritten by the app and
+		# reloaded by the file watcher); does nothing once everything has run
+		votc_cmd.1
 	}
 }

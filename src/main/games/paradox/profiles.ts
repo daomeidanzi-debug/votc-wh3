@@ -39,6 +39,7 @@ export interface PdxProfile {
    * 'gui'  - the mod's hidden GUI timer applies the queued actions itself (a scripted GUI
    *          that fires the mod's command event)
    * 'keys' - the app types the run command into the game console when the game is in front
+   *          (no game uses it any more)
    * 'tuner' - the app sends each command over FireTuner itself (Civilization VI)
    */
   autoRun: 'gui' | 'keys' | 'tuner';
@@ -51,8 +52,6 @@ export interface PdxProfile {
   talkInGame: Localized;
 }
 
-const RUN_FILE = 'votc.txt';
-
 export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
   hoi4: {
     id: 'hoi4',
@@ -63,10 +62,12 @@ export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
     windowMatch: ['hoi4', 'hearts of iron'],
     logFiles: ['logs/game.log'],
     modFolder: 'votc_hoi4',
-    // the console's `run` reads from the user folder; older builds used run\
-    runFiles: { user: [RUN_FILE, path.join('run', RUN_FILE)] },
-    runCommand: `run ${RUN_FILE}`,
-    needsDebugMode: false,
+    // no console: the actions are a hidden event of the mod, reloaded by the -debug file
+    // watcher and fired by the daily pulse (time running) or the mod's VOTC buttons
+    runFiles: { user: [path.join('mod', 'votc_hoi4', 'events', 'votc_commands.txt')] },
+    runCommand: 'event votc_cmd.1',
+    consoleTyping: false,
+    needsDebugMode: true,
     setting: 'the world of the Second World War era, in a Hearts of Iron IV campaign',
     countryWord: { en: 'country', zh: '国家' },
     factLabels: {
@@ -85,7 +86,7 @@ export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
       major: 'major power',
     },
     publicFacts: ['ideology', 'party', 'faction', 'war_with', 'major'],
-    autoRun: 'keys',
+    autoRun: 'gui',
     talkInGame: {
       en: `the "Talk" button in a country's diplomacy view (its leader, advisors and generals), or "VOTC" in the top bar (your own people)`,
       zh: '国家外交界面的“交谈”按钮（该国领袖、顾问和将领），或顶栏的“VOTC”按钮（本国人物）',
@@ -132,8 +133,8 @@ export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
     steamFolder: 'Europa Universalis V',
     exeNames: ['eu5.exe'],
     windowMatch: ['eu5', 'europa universalis v'],
-    // debug_log lines land in debug.log (with -debug_mode, which the console needs anyway)
-    logFiles: ['logs/debug.log'],
+    // the mod logs with error_log: EU5 buffers debug.log, error.log is written line by line
+    logFiles: ['logs/error.log'],
     modFolder: 'votc_eu5',
     // like Victoria 3: no console (it can crash the game); the actions are a hidden event of
     // the mod, reloaded by the -debug_mode file watcher and fired by the mod's runner
@@ -165,9 +166,12 @@ export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
     windowMatch: ['stellaris'],
     logFiles: ['logs/game.log'],
     modFolder: 'votc_stellaris',
-    runFiles: { user: [RUN_FILE, path.join('run', RUN_FILE)] },
-    runCommand: `run ${RUN_FILE}`,
-    needsDebugMode: false,
+    // no console: the actions are a hidden event of the mod, reloaded by the file watcher of
+    // -debug_mode and fired by the monthly pulse or the talk decision
+    runFiles: { user: [path.join('mod', 'votc_stellaris', 'events', 'votc_commands.txt')] },
+    runCommand: 'event votc_cmd.1',
+    consoleTyping: false,
+    needsDebugMode: true,
     setting: 'a galaxy of rival interstellar empires, in a Stellaris campaign',
     countryWord: { en: 'empire', zh: '帝国' },
     factLabels: {
@@ -185,7 +189,7 @@ export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
       federation: 'federation',
     },
     publicFacts: ['authority', 'ethics', 'species', 'war_with', 'federation'],
-    autoRun: 'keys',
+    autoRun: 'gui',
     talkInGame: {
       en: 'the "Open communications (VOTC)" decision on your capital planet',
       zh: '首都星球“决议”里的“开启通讯（VOTC）”',

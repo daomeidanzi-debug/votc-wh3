@@ -4,7 +4,7 @@ votc_is_relevant_country = {
 	OR = {
 		is_great_power = yes
 		is_at_war_with = scope:votc_player
-		is_allied_with = scope:votc_player
+		is_allied_with = { target = scope:votc_player }
 		is_rival_of = scope:votc_player
 		scope:votc_player = { is_rival_of = prev }
 		is_subject_of = scope:votc_player

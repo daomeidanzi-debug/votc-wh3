@@ -2,7 +2,16 @@
 # Line format: see src/main/games/paradox/types.ts in the VOTC source.
 # Unless noted, every effect here runs in the scope of the player's country.
 
-# console refresh (the app queues `<TAG> = { votc_snapshot_refresh = yes }`)
+# Applies the actions the VOTC app queued (also while paused): fires the command event in the
+# player's country. Works from any scope.
+votc_apply_actions = {
+	every_country = {
+		limit = { is_ai = no }
+		country_event = votc_cmd.1
+	}
+}
+
+# refresh command (the app queues `<TAG> = { votc_snapshot_refresh = yes }`)
 votc_snapshot_refresh = {
 	votc_snapshot = yes
 }

@@ -1,13 +1,20 @@
-# VOTC Bridge (GPL-3.0, see LICENSE.txt): "Talk (VOTC)" for every character, at home or abroad.
+﻿# VOTC Bridge (GPL-3.0, see LICENSE.txt): "Talk (VOTC)" for every character, at home or abroad.
 # Logs the character and the countries involved; the VOTC app opens the conversation.
 # Changes nothing in the game. scope:actor = the player's country, scope:recipient = the character.
+#
+# The only candidate is the clicked character (source = recipient), and a click runs the
+# interaction at once (context_menu_click_mode = click). Without these the game checked every
+# character in the world and offered a list to pick from. The effect is hidden, or hovering
+# the button would describe the whole snapshot it logs, which made the game stutter.
+# Neither on_own_nation nor on_other_nation: each one set to yes is a requirement of its own
+# ("only for your own characters" / "only for foreign characters"), so with both no character
+# qualifies; with neither, everyone does (like the game's own pap_reassign_cleric).
 
 votc_talk = {
-	on_own_nation = yes
-	on_other_nation = yes
 	message = no
 	show_message = no
 	show_message_to_target = no
+	context_menu_click_mode = click
 	ai_tick = never
 
 	potential = {
@@ -16,6 +23,7 @@ votc_talk = {
 
 	select_trigger = {
 		looking_for_a = character
+		source = recipient
 		target_flag = recipient
 		name = "choose_character"
 		column = {
@@ -27,7 +35,9 @@ votc_talk = {
 	}
 
 	effect = {
-		scope:recipient = { votc_talk_to_character = yes }
+		hidden_effect = {
+			scope:recipient = { votc_talk_to_character = yes }
+		}
 	}
 
 	ai_will_do = {

@@ -332,7 +332,7 @@ const EU5: Record<string, Compiler> = {
   },
   alliance: (c) => {
     const a = tag(c, 'a'), b = tag(c, 'b'); differ(a, b);
-    return { effect: `c:${a} = { create_alliance = { target = c:${b} } }`, check: `c:${a} = { is_allied_with = c:${b} }` };
+    return { effect: `c:${a} = { create_alliance = { target = c:${b} } }`, check: `c:${a} = { is_allied_with = { target = c:${b} } }` };
   },
   truce: (c) => {
     const a = tag(c, 'a'), b = tag(c, 'b'); differ(a, b);
@@ -356,7 +356,7 @@ const EU5: Record<string, Compiler> = {
   },
   break_alliance: (c) => {
     const a = tag(c, 'a'), b = tag(c, 'b'); differ(a, b);
-    return { effect: `c:${a} = { break_alliance = { target = c:${b} } }`, check: `c:${a} = { NOT = { is_allied_with = c:${b} } }` };
+    return { effect: `c:${a} = { break_alliance = { target = c:${b} } }`, check: `c:${a} = { NOT = { is_allied_with = { target = c:${b} } } }` };
   },
   // `a` lets `b` build a spy network in it (shared secrets, an open court)
   spy_network: (c) => {
@@ -536,9 +536,13 @@ export interface QueuedCommand {
   compiled: Compiled;
 }
 
-/** Log statement of each engine: HOI4/Stellaris `log` (game.log), Victoria 3/EU5 `debug_log` (debug.log). */
+/**
+ * Log statement of each engine: HOI4/Stellaris `log` (game.log), Victoria 3 `debug_log`
+ * (debug.log), EU5 `error_log` (error.log: EU5 writes debug.log in buffered chunks, so a
+ * talk request could wait 2-15 seconds there; error.log is written line by line).
+ */
 function logEffect(game: PdxGame, text: string): string {
-  const key = game === 'vic3' || game === 'eu5' ? 'debug_log' : 'log';
+  const key = game === 'vic3' ? 'debug_log' : game === 'eu5' ? 'error_log' : 'log';
   return `${key} = "${text}"`;
 }
 
@@ -566,21 +570,23 @@ function markDone(game: PdxGame, seq: number): string {
 }
 
 /**
- * Victoria 3 and EU5 never use the console: a console command from the GUI races the game's
- * threads for the random generator ("Random is blocked by thread"), which crashes Victoria 3.
+ * No game uses the console any more: a console command from the GUI races the game's threads
+ * for the random generator ("Random is blocked by thread"), which crashes Victoria 3, and
+ * players do not want the console opened over HOI4 or Stellaris.
  * The commands go into a hidden event of the mod (events/votc_commands.txt); the -debug_mode
- * file watcher reloads it when it changes, and the mod's runner fires it through a scripted
- * GUI every 2 seconds. The event's own trigger is false once the newest command has run, so
+ * (HOI4: -debug) file watcher reloads it when it changes. Victoria 3/EU5: the mod's runner fires
+ * it through a scripted GUI every 2 seconds; HOI4 (no GUI timer): the daily pulse and the mod's
+ * VOTC buttons fire it; Stellaris: the monthly pulse and the talk decision. The event's own trigger is false once the newest command has run, so
  * firing it then does nothing. Nothing else is rewritten while the game runs: reloading
  * scripted triggers makes the file watcher reload all of them, which crashed Victoria 3
  * ("Pure Virtual Function Call").
  */
 export const VIC3_EVENT = 'votc_cmd.1';
 
-type EventGame = 'vic3' | 'eu5';
+type EventGame = 'vic3' | 'eu5' | 'hoi4' | 'stellaris';
 
 function isEventGame(game: PdxGame): game is EventGame {
-  return game === 'vic3' || game === 'eu5';
+  return game === 'vic3' || game === 'eu5' || game === 'hoi4' || game === 'stellaris';
 }
 
 function eventFile(game: EventGame, queue: QueuedCommand[]): string {
@@ -588,6 +594,28 @@ function eventFile(game: EventGame, queue: QueuedCommand[]): string {
   const last = queue.length ? Math.max(...queue.map((q) => q.seq)) : 0;
   if (queue.length) body.push(`\t\t${logEffect(game, `VOTC|ACK|${last}`)}`);
   const trigger = queue.length ? [`\t\t${notDoneTrigger(game, last)}`] : ['\t\talways = no'];
+  if (game === 'hoi4' || game === 'stellaris') {
+    // fired by pulses that run for every country: only the player's applies the commands
+    if (queue.length) trigger.unshift('\t\tis_ai = no');
+    return [
+      '# Written by the VOTC app: the actions agreed in conversations. Do not edit.',
+      game === 'hoi4' ? 'add_namespace = votc_cmd' : 'namespace = votc_cmd',
+      '',
+      'country_event = {',
+      `\tid = ${VIC3_EVENT}`,
+      game === 'hoi4' ? '\thidden = yes' : '\thide_window = yes',
+      '\tis_triggered_only = yes',
+      '\ttrigger = {',
+      ...trigger,
+      '\t}',
+      '\timmediate = {',
+      ...body,
+      '\t}',
+      `\toption = { name = ${VIC3_EVENT}.a }`,
+      '}',
+      '',
+    ].join('\n');
+  }
   // EU5 events, hidden ones too, carry an outcome, title and desc (see the game's own)
   const eu5Fields = game === 'eu5' ? ['\toutcome = neutral', '\ttitle = empty_text', '\tdesc = empty_text'] : [];
   return [
@@ -598,7 +626,6 @@ function eventFile(game: EventGame, queue: QueuedCommand[]): string {
     '\ttype = country_event',
     ...eu5Fields,
     '\thidden = yes',
-    '\torphan = yes',
     '\ttrigger = {',
     ...trigger,
     '\t}',
@@ -610,7 +637,7 @@ function eventFile(game: EventGame, queue: QueuedCommand[]): string {
   ].join('\n');
 }
 
-/** Victoria 3/EU5 read script files as UTF-8 with a byte order mark. */
+/** The games read script files as UTF-8 with a byte order mark. */
 export function runFileEncoding(game: PdxGame): { bom: boolean } {
   return { bom: isEventGame(game) };
 }
@@ -624,22 +651,9 @@ export function guardedScript(game: PdxGame, q: QueuedCommand): string {
 }
 
 /**
- * The file the player runs (HOI4/Stellaris: a list of console commands for `run`;
- * Victoria 3/EU5: the mod's hidden command event).
+ * The file the app writes: the mod's hidden command event (Victoria 3, EU5, HOI4, Stellaris).
  */
 export function buildRunFile(game: PdxGame, queue: QueuedCommand[]): string {
-  if (isEventGame(game)) return eventFile(game, queue);
-  if (queue.length === 0) return '';
-  const last = Math.max(...queue.map((q) => q.seq));
-  const statements = queue.map((q) => guardedScript(game, q));
-  statements.push(logEffect(game, `VOTC|ACK|${last}`));
-  switch (game) {
-    case 'hoi4':
-      // eval_effect runs inline script; every statement must fit on its line
-      return statements.map((s) => `eval_effect ${s}`).join('\n') + '\n';
-    case 'stellaris':
-      return statements.map((s) => `effect ${s}`).join('\n') + '\n';
-    default:
-      return statements.join('\n') + '\n';
-  }
+  // Civilization VI gets its commands over FireTuner, not from a file
+  return isEventGame(game) ? eventFile(game, queue) : '';
 }

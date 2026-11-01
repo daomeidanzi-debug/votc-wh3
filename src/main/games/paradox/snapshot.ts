@@ -26,6 +26,20 @@ export function cleanText(value: string): string {
     .trim();
 }
 
+/**
+ * EU5 wraps names in text codes: "\x15TOOLTIP:CHARACTER,123 \x15L; Jeanne\x15!\x15!", styles as
+ * "\x15e; ...". Keep the text; an empty object (id 4294967295, the scope did not resolve) is
+ * dropped, so the value counts as missing.
+ */
+export function stripTextCodes(line: string): string {
+  if (!line.includes('\x15')) return line;
+  return line
+    .replace(/\x15TOOLTIP:[A-Z_]+,4294967295 \x15L; [^\x15]*(\x15!)*/g, '')
+    .replace(/\x15TOOLTIP:[^\x15]*\x15L; /g, '')
+    .replace(/\x15[A-Za-z]; /g, '')
+    .replace(/\x15!?/g, '');
+}
+
 /** The game could not resolve a localisation function: treat the value as missing. */
 function unresolved(value: string): boolean {
   return /\[[^\]]*\]|^\s*$|Unknown|INVALID|NOT_FOUND/i.test(value);
@@ -144,7 +158,7 @@ export class SnapshotParser {
     const at = line.indexOf(LINE_MARKER);
     if (at < 0) return;
     // Jomini prefixes every line with "[time][file:line]: script file:line: "
-    const parts = line.slice(at + LINE_MARKER.length).replace(/\r$/, '').split('|');
+    const parts = stripTextCodes(line.slice(at + LINE_MARKER.length).replace(/\r$/, '')).split('|');
     const kind = parts[0];
     switch (kind) {
       case 'BEGIN':

@@ -48,7 +48,8 @@ export class LogFollower {
   private started = false;
   private id: bigint | null = null;
 
-  constructor(private file: string, private onLine: (line: string) => void) {}
+  /** backlog: the line was already in the log when the app started following it */
+  constructor(private file: string, private onLine: (line: string, backlog: boolean) => void) {}
 
   private rotated(n: number): string {
     const ext = path.extname(this.file);
@@ -63,6 +64,7 @@ export class LogFollower {
       return;
     }
     const size = Number(stat.size);
+    const backlog = !this.started;
     if (!this.started) {
       this.started = true;
       this.id = stat.ino;
@@ -77,7 +79,7 @@ export class LogFollower {
       this.offset = 0;
       this.remainder = '';
     }
-    this.readFrom(this.file, size);
+    this.readFrom(this.file, size, backlog);
   }
 
   /** The log was replaced: finish the old one (now debug.N.log), then the newer copies. */
@@ -108,7 +110,7 @@ export class LogFollower {
     }
   }
 
-  private readFrom(file: string, size: number): void {
+  private readFrom(file: string, size: number, backlog = false): void {
     if (size <= this.offset) return;
     let fd: number | null = null;
     try {
@@ -120,7 +122,7 @@ export class LogFollower {
       const text = this.remainder + buf.subarray(0, read).toString('utf-8');
       const lines = text.split('\n');
       this.remainder = lines.pop() ?? '';
-      for (const line of lines) this.onLine(line);
+      for (const line of lines) this.onLine(line, backlog);
     } catch (error) {
       console.warn(`ParadoxAdapter: could not read ${file}:`, error);
     } finally {
@@ -134,21 +136,27 @@ export class LogFollower {
  *
  * Game -> app: the VOTC mod logs a snapshot of the player's country and the countries that
  * matter to it (monthly, on load, and when asked), see paradox/types.ts.
- * App -> game: whitelisted commands compiled to script (paradox/commands.ts) and written to
- * votc.txt. Victoria 3 and EU5 get them as the mod's hidden command event instead, which the
- * mod's GUI timer fires through a scripted GUI (no console); for HOI4 and Stellaris
- * the app types `run votc.txt` into the console once the game is in front. The game
- * acknowledges every command, so the file can run any number of times.
+ * App -> game: whitelisted commands compiled to script (paradox/commands.ts) and written into
+ * the mod's hidden command event, which the game's file watcher reloads (launch option
+ * -debug / -debug_mode) and the mod fires by itself. No console is used. The game
+ * acknowledges every command, so the event can fire any number of times.
  *
  * Talking: in-game buttons / right-click interactions log a snapshot with a talk request
  * (and the characters involved); the adapter emits 'talk-request'.
  */
+/** The launch option that turns on the file watcher (HOI4 calls it -debug). */
+function debugFlag(game: string): string {
+  return game === 'hoi4' ? '-debug' : '-debug_mode';
+}
+
 export class ParadoxAdapter extends EventEmitter implements GameAdapter {
   readonly family = 'paradox' as const;
   readonly folderKind = 'documents' as const;
   readonly promptVariants: string[];
 
   private followers: LogFollower[] = [];
+  /** true while lines that were in the log before the app started are parsed */
+  private replaying = false;
   private timer: NodeJS.Timeout | null = null;
   private parser: SnapshotParser;
   protected snapshot: PdxSnapshot | null = null;
@@ -233,8 +241,8 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
     if (this.profile.needsDebugMode) {
       warnings.push({
         type: 'debug_mode',
-        message: `${this.profile.name.en} only runs console commands with the -debug_mode launch option`,
-        suggestion: `In Steam: right-click ${this.profile.name.en} > Properties > Launch options, enter -debug_mode. The mod applies agreed actions through the console ("${this.profile.runCommand}").`,
+        message: `${this.profile.name.en} applies agreed actions only with the ${debugFlag(this.profile.id)} launch option`,
+        suggestion: `In Steam: right-click ${this.profile.name.en} > Properties > Launch options, enter ${debugFlag(this.profile.id)}. The game then reloads the mod's action file by itself; no console is used.`,
       });
     }
     const err = testWritable(dir);
@@ -256,7 +264,12 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
     this.stop();
     const dir = this.userDir();
     if (!dir) return;
-    this.followers = this.profile.logFiles.map((rel) => new LogFollower(path.join(dir, rel), (line) => this.feedLine(line)));
+    this.followers = this.profile.logFiles.map((rel) => new LogFollower(path.join(dir, rel), (line, backlog) => {
+      // the old log only brings data: its talk requests were answered (or dropped) long ago
+      this.replaying = backlog;
+      this.feedLine(line);
+      this.replaying = false;
+    }));
     const tick = () => {
       for (const f of this.followers) f.poll();
       this.dropExpired();
@@ -287,7 +300,7 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
     if (Number.isFinite(seq)) this.lastSeq = Math.max(this.lastSeq, seq);
     console.log(`ParadoxAdapter(${this.profile.id}): snapshot (${s.reason}) with ${s.countries.length} countries, ${s.characters.length} characters, player ${s.player.tag}`);
     this.emit('snapshot', s);
-    if (s.talk) this.onTalkRequest(s);
+    if (s.talk && !this.replaying) this.onTalkRequest(s);
   }
 
   /** Right-click Talk / the in-game talk button: start the conversation or open the picker. */
@@ -376,8 +389,8 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
         ok: false,
         title: zh ? `还没有收到${this.profile.name.zh}的数据` : `No data from ${this.profile.name.en} yet`,
         details: zh
-          ? `请确认已启用 ${this.profile.modFolder} 模组并载入存档，让游戏至少运行一个月（或在控制台输入“${this.profile.runCommand}”刷新），然后再试。`
-          : `Make sure the ${this.profile.modFolder} mod is enabled and a save is loaded, let one in-game month pass (or type "${this.profile.runCommand}" in the console to refresh), then try again.`,
+          ? `请确认已启用 ${this.profile.modFolder} 模组并载入存档，让游戏至少运行一个月（或在游戏里点一次 VOTC 交谈按钮），然后再试。`
+          : `Make sure the ${this.profile.modFolder} mod is enabled and a save is loaded, let one in-game month pass (or use the VOTC talk button in the game once), then try again.`,
       };
     }
     const id = options.targetId;

@@ -112,6 +112,20 @@ function parse(lines) {
 }
 
 (async () => {
+  await section('EU5 names and log', () => {
+    const { stripTextCodes } = load('games/paradox/snapshot.js');
+    const X = String.fromCharCode(0x15);
+    check(stripTextCodes(`VOTC|P|leader|${X}TOOLTIP:CHARACTER,512 ${X}L; Philippe VI${X}!${X}!`) === 'VOTC|P|leader|Philippe VI', 'tooltip codes are stripped from names');
+    check(stripTextCodes(`VOTC|P|name|${X}TOOLTIP:COUNTRY,4294967295 ${X}L; Country${X}!${X}!`) === 'VOTC|P|name|', 'an empty object counts as missing');
+    check(stripTextCodes(`VOTC|CH|FRA|Jeanne|title|${X}e; ${X}TOOLTIP:GAME_CONCEPT,courtier ${X}L; Courtier${X}!${X}!`) === 'VOTC|CH|FRA|Jeanne|title|Courtier', 'styled text keeps its words');
+    // EU5 resolves saved scopes by name in log text; SCOPE.sCountry(...) gave empty objects
+    const dir = path.join(REPO, 'paradox_mods', 'votc_eu5', 'in_game', 'common');
+    const all = ['scripted_effects', 'on_action', 'scripted_triggers'].flatMap((d) => fs.readdirSync(path.join(dir, d)).map((f) => fs.readFileSync(path.join(dir, d, f), 'utf-8'))).join('\n');
+    check(!all.includes('SCOPE.s') && all.includes('[votc_p.GetTag]') && !/\.GetName\]/.test(all), 'eu5: log text uses saved scopes and names without tooltips');
+    check(!all.includes('debug_log') && all.includes('error_log = "VOTC|BEGIN'), 'eu5: logs with error_log (debug.log is written late)');
+    check(PDX_PROFILES.eu5.logFiles.join() === 'logs/error.log', 'eu5: the app reads error.log');
+  });
+
   await section('snapshot parser', () => {
     const { snaps } = parse(HOI4_LOG);
     check(snaps.length === 1, 'one snapshot from BEGIN..END');
@@ -163,16 +177,34 @@ function parse(lines) {
 
   await section('run files', () => {
     const q = [{ seq: 101, op: 'war', compiled: compileCommand('hoi4', { op: 'war', a: 'GER', b: 'POL' }) }];
+    // HOI4 and Stellaris: no console either; a hidden event of the mod (Clausewitz syntax)
     const hoi4 = buildRunFile('hoi4', q);
-    const lines = hoi4.trim().split('\n');
-    check(lines.length === 2 && lines.every((l) => l.startsWith('eval_effect ')), 'hoi4: one eval_effect per line');
-    check(lines[0].includes('NOT = { check_variable = { global.votc_seq > 100 } }') && lines[0].includes('set_variable = { global.votc_seq = 101 }'), 'hoi4: guarded by the sequence variable');
-    check(lines[0].includes('log = "VOTC|RES|101|ok|war"') && lines[0].includes('log = "VOTC|RES|101|fail|war"'), 'hoi4: result checked in game');
-    check(lines[1] === 'eval_effect log = "VOTC|ACK|101"', 'hoi4: ack line');
+    check(/^add_namespace = votc_cmd$/m.test(hoi4) && /country_event = \{\n\tid = votc_cmd\.1\n\thidden = yes\n\tis_triggered_only = yes\n\ttrigger = \{\n\t\tis_ai = no\n\t\tNOT = \{ check_variable = \{ global\.votc_seq > 100 \} \}/.test(hoi4), 'hoi4: a hidden event that fires only for the player while something has not run');
+    check(hoi4.includes('set_variable = { global.votc_seq = 101 }') && !hoi4.includes('eval_effect'), 'hoi4: guarded by the sequence variable, no console');
+    check(hoi4.includes('log = "VOTC|RES|101|ok|war"') && hoi4.includes('log = "VOTC|RES|101|fail|war"'), 'hoi4: result checked in game');
+    check(hoi4.includes('\t\tlog = "VOTC|ACK|101"') && /option = \{ name = votc_cmd\.1\.a \}/.test(hoi4), 'hoi4: ack line');
+    const stel = buildRunFile('stellaris', [{ seq: 3, op: 'refresh', compiled: compileCommand('stellaris', { op: 'refresh' }) }]);
+    check(/^namespace = votc_cmd$/m.test(stel) && /\thide_window = yes\n\tis_triggered_only = yes/.test(stel) && !/^effect /m.test(stel), 'stellaris: a hidden event, no console');
+    for (const [game, dir] of [['hoi4', 'votc_hoi4'], ['stellaris', 'votc_stellaris']]) {
+      check(fs.readFileSync(path.join(REPO, 'paradox_mods', dir, 'events', 'votc_commands.txt'), 'utf-8').replace(/\r/g, '') === '\uFEFF' + buildRunFile(game, []), `${game}: the shipped event file equals an empty queue`);
+      check(PDX_PROFILES[game].consoleTyping === false && PDX_PROFILES[game].autoRun === 'gui' && PDX_PROFILES[game].needsDebugMode && PDX_PROFILES[game].runFiles.user[0].replace(/\\/g, '/') === `mod/${dir}/events/votc_commands.txt`, `${game}: the app writes the mod event, never the console`);
+    }
+    const hoiOn = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_hoi4', 'common', 'on_actions', 'votc_on_actions.txt'), 'utf-8');
+    const hoiGui = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_hoi4', 'common', 'scripted_guis', 'votc_scripted_guis.txt'), 'utf-8');
+    check(/on_daily = \{[\s\S]*country_event = votc_cmd\.1/.test(hoiOn) && (hoiGui.match(/votc_apply_actions = yes/g) || []).length === 2, 'hoi4: the daily pulse and both buttons fire the command event');
+    const stelOn = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_stellaris', 'common', 'on_actions', 'votc_on_actions.txt'), 'utf-8');
+    const stelDec = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_stellaris', 'common', 'decisions', 'votc_decisions.txt'), 'utf-8');
+    // Stellaris runs scripted effects through its macro preprocessor: "[This.GetName]" there
+    // became "Invalid macro entry" and empty names. The log lines live in events.
+    const stelFx = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_stellaris', 'common', 'scripted_effects', 'votc_scripted_effects.txt'), 'utf-8');
+    const stelEv = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_stellaris', 'events', 'votc_events.txt'), 'utf-8');
+    check(!/\[/.test(stelFx.replace(/^#.*$/gm, '')) && stelEv.includes('log = "VOTC|P|name|[This.GetName]"') && /id = votc\.2[\s\S]*VOTC\|META\|talk\|pick/.test(stelEv), 'stellaris: no brackets in scripted effects, names logged from events');
+    check((stelEv.match(/\{/g) || []).length === (stelEv.match(/\}/g) || []).length, 'stellaris: the events file is balanced');
+    check(/on_monthly_pulse_country = \{[\s\S]*votc_cmd\.1/.test(stelOn) && /country_event = \{ id = votc_cmd\.1 \}/.test(stelDec), 'stellaris: the monthly pulse and the talk decision fire the command event');
     const vic3 = buildRunFile('vic3', [{ seq: 7, op: 'opinion', compiled: compileCommand('vic3', { op: 'opinion', a: 'GBR', b: 'FRA', amount: 10 }) }]);
     check(vic3.includes('global_var:votc_seq < 7') && vic3.includes('debug_log = "VOTC|ACK|7"') && !vic3.includes('eval_effect'), 'vic3: script file with debug_log');
     // Victoria 3 has no `run` command: a hidden event of the mod, reloaded and fired by the mod's timer
-    check(/^namespace = votc_cmd$/m.test(vic3) && /votc_cmd\.1 = \{\n\ttype = country_event\n\thidden = yes\n\torphan = yes\n\ttrigger = \{\n\t\tOR = \{ NOT = \{ has_global_variable = votc_seq \} global_var:votc_seq < 7 \}\n\t\}\n\timmediate = \{/.test(vic3), 'vic3: commands are a hidden event that fires only while something has not run');
+    check(/^namespace = votc_cmd$/m.test(vic3) && /votc_cmd\.1 = \{\n\ttype = country_event\n\thidden = yes\n\ttrigger = \{\n\t\tOR = \{ NOT = \{ has_global_variable = votc_seq \} global_var:votc_seq < 7 \}\n\t\}\n\timmediate = \{/.test(vic3), 'vic3: commands are a hidden event that fires only while something has not run');
     const vic3Empty = buildRunFile('vic3', []);
     check(/votc_cmd\.1 = \{/.test(vic3Empty) && /trigger = \{\n\t\talways = no\n\t\}/.test(vic3Empty) && !vic3Empty.includes('VOTC|ACK'), 'vic3: the event exists even with nothing queued, and never fires then');
     check(PDX_PROFILES.vic3.runCommand === 'event votc_cmd.1' && PDX_PROFILES.vic3.runFiles.user[0].replace(/\\/g, '/') === 'mod/votc_vic3/events/votc_commands.txt', 'vic3: the event file lives in the mod');
@@ -184,6 +216,16 @@ function parse(lines) {
     check(runner.includes("GetScriptedGui('votc_apply_sgui').Execute(GuiScope.SetRoot(GetPlayer.MakeScope).End)") && runner.includes('visible = "[GetPlayer.IsValid]"'), 'vic3: the runner executes the scripted GUI');
     const sgui = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'scripted_guis', 'votc_sguis.txt'), 'utf-8');
     check(/votc_apply_sgui = \{[\s\S]*scope = country[\s\S]*is_player = yes[\s\S]*trigger_event = \{ id = votc_cmd\.1 \}/.test(sgui), 'vic3: the scripted GUI fires the command event');
+    // EU5 "Talk (VOTC)": only the clicked character is a candidate, a click runs it, and the
+    // effect is hidden (its hover tooltip described the whole snapshot and made the game stutter)
+    {
+      const talk = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_eu5', 'in_game', 'common', 'character_interactions', 'votc_interactions.txt'), 'utf-8');
+      check(/source = recipient/.test(talk) && /context_menu_click_mode = click/.test(talk) && /effect = \{\s*hidden_effect = \{\s*scope:recipient = \{ votc_talk_to_character = yes \}/.test(talk), 'eu5: the talk interaction is cheap to hover and runs on click');
+      // each of these flags is a requirement: with both, no character qualified
+      check(!/^\s*on_(own|other)_nation\s*=/m.test(talk), 'eu5: the talk interaction works on own and foreign characters');
+      const eu5Script = ['scripted_effects', 'scripted_triggers'].map((d) => fs.readdirSync(path.join(REPO, 'paradox_mods', 'votc_eu5', 'in_game', 'common', d)).map((f) => fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_eu5', 'in_game', 'common', d, f), 'utf-8')).join('\n')).join('\n');
+      check(!/is_allied_with = [^{]/.test(eu5Script) && !/is_allied_with = c:/.test(compileCommand('eu5', { op: 'alliance', a: 'CAS', b: 'ARA' }).check), 'eu5: is_allied_with takes { target = ... }');
+    }
     // rewriting a scripted trigger made the file watcher reload all of them: "Pure Virtual
     // Function Call". The app rewrites only the event file, and nothing refers to a trigger file.
     for (const mod of [['votc_vic3'], ['votc_eu5', 'in_game']]) {
@@ -193,13 +235,12 @@ function parse(lines) {
     check(!fs.readFileSync(path.join(REPO, 'src', 'main', 'games', 'paradox', 'ParadoxAdapter.ts'), 'utf-8').includes('extraRunFiles'), 'the app writes the run file only');
     const onActions = fs.readdirSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'on_actions')).map((f) => fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'on_actions', f), 'utf-8')).join('\n');
     check(/trigger_event = \{ id = votc_cmd\.1 \}/.test(onActions), 'vic3: the monthly pulse applies the actions in the game thread');
-    check(PDX_PROFILES.vic3.consoleTyping === false && PDX_PROFILES.eu5.consoleTyping === false && PDX_PROFILES.hoi4.consoleTyping !== false, 'vic3/eu5: the app never types into the console');
+    check(['vic3', 'eu5', 'hoi4', 'stellaris'].every((g) => PDX_PROFILES[g].consoleTyping === false), 'the app never types into the console');
     const { runFileEncoding } = load('games/paradox/commands.js');
-    check(runFileEncoding('vic3').bom && runFileEncoding('eu5').bom && !runFileEncoding('hoi4').bom, 'vic3/eu5: the event file is written with a byte order mark');
+    check(['vic3', 'eu5', 'hoi4', 'stellaris'].every((g) => runFileEncoding(g).bom) && !runFileEncoding('civ6').bom, 'the event file is written with a byte order mark');
     const vic3Shipped = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'events', 'votc_commands.txt'), 'utf-8').replace(/\r/g, '');
     check(vic3Shipped === '\uFEFF' + vic3Empty, 'vic3: the shipped event file equals an empty queue');
-    check(buildRunFile('stellaris', [{ seq: 3, op: 'refresh', compiled: compileCommand('stellaris', { op: 'refresh' }) }]).startsWith('effect if = {'), 'stellaris: console effect lines');
-    check(buildRunFile('hoi4', []) === '', 'empty queue writes an empty file');
+    check(buildRunFile('civ6', []) === '', 'Civilization VI writes no file');
     // EU5 (same engine as Victoria 3): the same scripted GUI runner, no console
     {
       const EU5 = path.join(REPO, 'paradox_mods', 'votc_eu5', 'in_game');
@@ -212,7 +253,7 @@ function parse(lines) {
       const eu5Empty = buildRunFile('eu5', []);
       check(read('events', 'votc_commands.txt') === '\uFEFF' + eu5Empty && /outcome = neutral[\s\S]*hidden = yes[\s\S]*always = no[\s\S]*immediate = \{\n\t\}/.test(eu5Empty), 'eu5: the shipped event file equals an empty queue');
       const eu5One = buildRunFile('eu5', [{ seq: 7, op: 'money', compiled: compileCommand('eu5', { op: 'money', from: 'CAS', to: 'ARA', amount: 50 }) }]);
-      check(/trigger = \{\n\t\tOR = \{ NOT = \{ has_global_variable = votc_seq \} global_var:votc_seq < 7 \}/.test(eu5One) && eu5One.includes('add_gold = 50') && eu5One.includes('debug_log = "VOTC|ACK|7"'), 'eu5: queued commands go into the event');
+      check(/trigger = \{\n\t\tOR = \{ NOT = \{ has_global_variable = votc_seq \} global_var:votc_seq < 7 \}/.test(eu5One) && eu5One.includes('add_gold = 50') && eu5One.includes('error_log = "VOTC|ACK|7"'), 'eu5: queued commands go into the event');
       check(PDX_PROFILES.eu5.runFiles.user.join() === path.join('mod', 'votc_eu5', 'in_game', 'events', 'votc_commands.txt') && !PDX_PROFILES.eu5.runFiles.install, 'eu5: the app writes the mod event');
     }
     // braces must balance or the game rejects the whole line
@@ -241,6 +282,13 @@ function parse(lines) {
     fs.appendFileSync(log, 'z\n');
     f.poll();
     check(got[got.length - 1] === 'z' && got.length === 7, 'keeps following the new log');
+    // the lines already there at the start are the backlog (old talk requests are not replayed)
+    const flags = [];
+    const g = new LogFollower(log, (l, backlog) => flags.push(backlog));
+    g.poll();
+    fs.appendFileSync(log, 'new\n');
+    g.poll();
+    check(flags.length === 3 && flags[0] && flags[1] && !flags[2], 'old lines are marked as backlog');
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -267,16 +315,16 @@ function parse(lines) {
     hoi4.runGameEffect({ op: 'opinion', a: 'GER', b: 'ENG', amount: 20 });
     let threw = false; try { hoi4.runGameEffect('GER = { annex_country = { target = ENG } }'); } catch { threw = true; }
     check(threw, 'raw script is refused');
-    const runFile = path.join(USER_DIR, 'votc.txt');
+    const runFile = path.join(USER_DIR, 'mod', 'votc_hoi4', 'events', 'votc_commands.txt');
     const content = fs.readFileSync(runFile, 'utf-8');
-    check(content.includes('votc_opinion_good') && fs.readFileSync(path.join(USER_DIR, 'run', 'votc.txt'), 'utf-8') === content, 'command file written where `run` looks');
+    check(content.startsWith('\uFEFF') && content.includes('votc_opinion_good'), 'the command event is written into the mod');
     check(pending[pending.length - 1] === 1, 'pending count reported');
     const seq = Number(/VOTC\|ACK\|(\d+)/.exec(content)[1]);
     const failed = [];
     hoi4.on('command-failed', (f) => failed.push(f));
     fs.appendFileSync(path.join(USER_DIR, 'logs', 'game.log'), `[x][y]: VOTC|RES|${seq}|fail|opinion\n[x][y]: VOTC|ACK|${seq}\n`);
     await new Promise((res) => setTimeout(res, 1000));
-    check(fs.readFileSync(runFile, 'utf-8') === '' && pending[pending.length - 1] === 0, 'acknowledged commands leave the file');
+    check(fs.readFileSync(runFile, 'utf-8') === '\uFEFF' + buildRunFile('hoi4', []) && pending[pending.length - 1] === 0, 'acknowledged commands leave the file');
     check(failed.length === 1 && failed[0].op === 'opinion', 'failed outcome reported');
     // game restarted: a new, shorter log
     fs.writeFileSync(path.join(USER_DIR, 'logs', 'game.log'), HOI4_LOG.join('\n').replace('482913', '111111') + '\n');
@@ -353,7 +401,7 @@ function parse(lines) {
     fs.appendFileSync(log, HOI4_LOG.slice(0, -1).concat(['[x][y]: VOTC|META|talk|character', '[x][y]: VOTC|META|talk_tag|GER', '[x][y]: VOTC|META|talk_name|Erwin Rommel', '[x][y]: VOTC|END']).join('\n') + '\n');
     await new Promise((res) => setTimeout(res, 1000));
     check(requests.length === 2 && requests[1].targetId === rommel.id, 'a character request starts that conversation');
-    check(PDX_PROFILES.vic3.autoRun === 'gui' && PDX_PROFILES.hoi4.autoRun === 'keys', 'Jomini games run the file themselves, the others get typed into');
+    check(PDX_PROFILES.vic3.autoRun === 'gui' && PDX_PROFILES.hoi4.autoRun === 'gui', 'every game applies the actions itself');
     hoi4.stop();
 
     // Victoria 3 only lists character interactions for the player's own characters and exiles:

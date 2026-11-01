@@ -14,7 +14,11 @@ decision_votc_open_communications = {
 	}
 
 	effect = {
-		owner = { votc_talk_from_decision = yes }
+		owner = {
+			votc_talk_from_decision = yes
+			# also applies the actions the VOTC app queued, while paused too
+			country_event = { id = votc_cmd.1 }
+		}
 	}
 
 	ai_weight = {

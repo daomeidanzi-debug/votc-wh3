@@ -10,7 +10,7 @@ interface TalkPickerProps {
 
 const GROUPS: Array<{ key: NonNullable<TalkTargetInfo['group']>; label: string; fallback: string }> = [
   { key: 'own', label: 'talkPicker.groupOwn', fallback: 'Your people' },
-  { key: 'leaders', label: 'talkPicker.groupLeaders', fallback: 'Heads of state' },
+  { key: 'leaders', label: 'talkPicker.groupLeaders', fallback: 'Other countries' },
   { key: 'people', label: 'talkPicker.groupPeople', fallback: 'Other characters' },
 ];
 
@@ -27,8 +27,23 @@ const TalkPicker: React.FC<TalkPickerProps> = ({ targets, onPick, onClose }) => 
     const shown = f
       ? targets.filter((x) => `${x.name} ${x.leader} ${x.leaderTitle} ${x.id}`.toLowerCase().includes(f))
       : targets;
+    const people = shown.filter((x) => x.group === 'people');
+    const placed = new Set<TalkTargetInfo>();
+    // a foreign country's generals, advisors... right under its head of state, not at the end
+    const leaders = shown
+      .filter((x) => (x.group ?? 'leaders') === 'leaders')
+      .flatMap((leader) => {
+        const theirs = people.filter((p) => p.name === leader.name);
+        theirs.forEach((p) => placed.add(p));
+        return [leader, ...theirs];
+      });
+    const items: Record<string, TalkTargetInfo[]> = {
+      own: shown.filter((x) => x.group === 'own'),
+      leaders,
+      people: people.filter((p) => !placed.has(p)),
+    };
     return GROUPS
-      .map((g) => ({ ...g, items: shown.filter((x) => (x.group ?? 'leaders') === g.key) }))
+      .map((g) => ({ ...g, items: items[g.key] }))
       .filter((g) => g.items.length > 0);
   }, [targets, filter]);
 
@@ -58,8 +73,12 @@ const TalkPicker: React.FC<TalkPickerProps> = ({ targets, onPick, onClose }) => 
                 <React.Fragment key={g.key}>
                   {groups.length > 1 && <div className="talk-picker-group">{t(g.label, g.fallback)}</div>}
                   {g.items.map((target) => (
-                    <button key={target.id} className="talk-picker-item" onClick={() => onPick(target)}>
-                      {g.key === 'leaders' ? (
+                    <button
+                      key={target.id}
+                      className={`talk-picker-item${g.key === 'leaders' && target.group === 'people' ? ' talk-picker-member' : ''}`}
+                      onClick={() => onPick(target)}
+                    >
+                      {(target.group ?? 'leaders') === 'leaders' ? (
                         <>
                           <span className="talk-picker-name">{target.name}</span>
                           <span className="talk-picker-leader">
