@@ -1,4 +1,4 @@
-﻿# Written by the VOTC app: the actions agreed in conversations. Do not edit.
+# Written by the VOTC app: the actions agreed in conversations. Do not edit.
 add_namespace = votc_cmd
 
 country_event = {

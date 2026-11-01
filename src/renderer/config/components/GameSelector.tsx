@@ -21,6 +21,12 @@ const GameSelector: React.FC = () => {
     window.gameAPI?.listGames().then(setGames).catch((error) => console.error('Failed to list games:', error));
   }, [appSettings?.language]);
 
+  const onConsoleRun = async (enabled: boolean) => {
+    if (!active) return;
+    await window.gameAPI.setConsoleRun(active.id, enabled);
+    setGames((list) => list.map((g) => (g.id === active.id ? { ...g, consoleRun: enabled } : g)));
+  };
+
   const activeId = appSettings?.activeGame ?? 'ck3';
   const active = games.find((g) => g.id === activeId);
   const folder = appSettings?.ck3UserFolderPath;
@@ -49,6 +55,16 @@ const GameSelector: React.FC = () => {
         ))}
       </select>
       {active && <p className="game-talk-hint">{active.talkHint}</p>}
+      {active?.consoleOption && (
+        <label className="checkbox-label game-console-run">
+          <input type="checkbox" checked={!!active.consoleRun} onChange={(e) => onConsoleRun(e.target.checked)} />
+          {t('settings.consoleRun', 'Also apply actions through the game console (fallback: types "run votc.txt" into the console when the game is in front)')}
+          <Tooltip
+            text={t('settings.consoleRunHelp', 'Off: the mod applies actions by itself, without the console (needs debug mode). On: the app also opens the console and types the run command, in case the game does not pick up the actions. Each action still applies only once.')}
+            position="bottom"
+          />
+        </label>
+      )}
 
       <label>
         {hasSelectedPath ? t('settings.selectedCK3FolderTitle') : t('settings.selectCK3UserFolderTitle')}

@@ -30,6 +30,9 @@ export interface GameInfo {
   folderKind: string;
   folderExample: string;
   talkHint: string;
+  /** HOI4 / Stellaris: the console way can be turned on */
+  consoleOption?: boolean;
+  consoleRun?: boolean;
 }
 
 export interface TalkTargetInfo {
@@ -47,6 +50,7 @@ declare global {
     gameAPI: {
       listGames: () => Promise<GameInfo[]>;
       getActiveGame: () => Promise<{ id: string; folder: string | null }>;
+      setConsoleRun: (id: string, enabled: boolean) => Promise<void>;
       setActiveGame: (id: string) => Promise<{ id: string; folder: string | null; warnings: InitializationWarning[] }>;
       listTalkTargets: (tag?: string) => Promise<TalkTargetInfo[]>;
       startTalk: (targetId: string) => Promise<void>;

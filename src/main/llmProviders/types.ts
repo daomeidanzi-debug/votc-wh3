@@ -361,6 +361,8 @@ export interface AppSettings {
   summaryPromptSettings?: SummaryPromptSettings; // Custom prompts for summaries
   language?: string; // User's preferred language code (e.g., 'en', 'ru', 'fr')
   allowPrerelease?: boolean; // Allow pre-release updates
+  /** HOI4 / Stellaris: also apply actions through the game console (game id -> on) */
+  consoleRunByGame?: Record<string, boolean>;
 }
 
 

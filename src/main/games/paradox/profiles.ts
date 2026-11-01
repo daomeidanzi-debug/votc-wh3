@@ -50,6 +50,12 @@ export interface PdxProfile {
   consoleTyping?: boolean;
   /** where the player starts a conversation inside the game */
   talkInGame: Localized;
+  /**
+   * Optional fallback the player can pick in the settings (HOI4, Stellaris): the app also writes
+   * the commands as a console file and types `run` into the console, in case the game does not
+   * reload the mod's event file. The commands are guarded, so running both ways is harmless.
+   */
+  consoleRun?: { files: string[]; command: string };
 }
 
 export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
@@ -62,8 +68,8 @@ export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
     windowMatch: ['hoi4', 'hearts of iron'],
     logFiles: ['logs/game.log'],
     modFolder: 'votc_hoi4',
-    // no console: the actions are a hidden event of the mod, reloaded by the -debug file
-    // watcher and fired by the daily pulse (time running) or the mod's VOTC buttons
+    // no console: the actions are a hidden event of the mod, reloaded by the file watcher of
+    // debug mode (-debug_mode), and fired by the daily pulse (time running) or the mod's VOTC buttons
     runFiles: { user: [path.join('mod', 'votc_hoi4', 'events', 'votc_commands.txt')] },
     runCommand: 'event votc_cmd.1',
     consoleTyping: false,
@@ -87,6 +93,7 @@ export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
     },
     publicFacts: ['ideology', 'party', 'faction', 'war_with', 'major'],
     autoRun: 'gui',
+    consoleRun: { files: ['votc.txt', path.join('run', 'votc.txt')], command: 'run votc.txt' },
     talkInGame: {
       en: `the "Talk" button in a country's diplomacy view (its leader, advisors and generals), or "VOTC" in the top bar (your own people)`,
       zh: '国家外交界面的“交谈”按钮（该国领袖、顾问和将领），或顶栏的“VOTC”按钮（本国人物）',
@@ -190,6 +197,7 @@ export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
     },
     publicFacts: ['authority', 'ethics', 'species', 'war_with', 'federation'],
     autoRun: 'gui',
+    consoleRun: { files: ['votc.txt', path.join('run', 'votc.txt')], command: 'run votc.txt' },
     talkInGame: {
       en: 'the "Open communications (VOTC)" decision on your capital planet',
       zh: '首都星球“决议”里的“开启通讯（VOTC）”',

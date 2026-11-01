@@ -6,6 +6,7 @@ import { Character } from '../gameData/Character';
 import { VOTC_PROMPTS_HELPERS_DIR } from '../utils/paths';
 import { app } from 'electron';
 import { PromptScriptSandbox } from './PromptScriptSandbox';
+import { speechStyle } from './speechStyle';
 
 type TemplateContext = {
   character: Character;
@@ -78,6 +79,12 @@ export class TemplateEngine {
     Handlebars.registerHelper('otherCharacters', (characters: Map<number, Character>, currentId: number) => {
       if (!characters || typeof characters.values !== 'function') return [];
       return Array.from(characters.values()).filter(c => c.id !== currentId);
+    });
+
+    // How a character speaks: {{speechStyle gameData id}} (see speechStyle.ts)
+    Handlebars.registerHelper('speechStyle', (gameData: GameData, id: number) => {
+      const c = gameData?.characters?.get?.(id);
+      return speechStyle(gameData?.game ?? '', c, (gameData as any)?.worldMods);
     });
 
     Handlebars.registerHelper('formatRelations', (relations: string[]) => {

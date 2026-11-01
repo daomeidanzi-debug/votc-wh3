@@ -157,6 +157,8 @@ export class SnapshotParser {
   feed(line: string): void {
     const at = line.indexOf(LINE_MARKER);
     if (at < 0) return;
+    // EU5 (error.log) quotes a line it could not resolve: "Data error in loc string 'VOTC|...'"
+    if (line.includes('Data error in loc string')) return;
     // Jomini prefixes every line with "[time][file:line]: script file:line: "
     const parts = stripTextCodes(line.slice(at + LINE_MARKER.length).replace(/\r$/, '')).split('|');
     const kind = parts[0];

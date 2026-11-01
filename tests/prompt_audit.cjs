@@ -156,7 +156,9 @@ const CASES = {
   wh3: { must: ['卡尔·弗兰茨', '外人不知道'], mustNot: ['treasury 5000', '国库 5000'] },
   tk: { must: ['刘备', '刘备的角色信息', '外人不知道'], mustNot: ['WARHAMMER', 'treasury 5000', '国库 5000', '[备的角色信息'] },
   attila: { must: ['阿提拉', '395 AD', '外人不知道'], mustNot: ['WARHAMMER', 'Warhammer', '{{', 'treasury 9000', '国库 9000', 'undefined'] },
-  hoi4: { target: 'ITA', must: ['巴尔博', '1962', 'NOT real history', '罗马条约组织', 'Government of your country: 法西斯主义', 'Your traits: 空军元帅', 'triumph of the Axis', '在这个世界里的历史'], mustNot: ['Second World War era', '233', '41%', 'countrys', '&#x27;'] },
+  // world*: only checked while the player has the alternate-history mod enabled (it is read from their game)
+  hoi4: { target: 'ITA', must: ['巴尔博', '1962', '罗马条约组织', 'Government of your country: 法西斯主义', 'Your traits: 空军元帅'], mustNot: ['233', '41%', 'countrys', '&#x27;'],
+    worldMust: ['NOT real history', 'triumph of the Axis', '在这个世界里的历史'], worldMustNot: ['Second World War era'] },
   vic3: { target: () => personTargetId({ tag: 'FRA', name: '托马·比若' }), must: ['托马·比若', '鲁莽', '阿尔及利亚', '莱奥妮', '路易-菲利普', '基佐'], mustNot: ['512000', '90000'] },
   eu5: { target: 'POR', must: ['阿方索五世', '阿拉贡的莱昂诺尔', '1444'], mustNot: ['412'] },
   stellaris: { target: 'E1', must: ['克伊', '塔祖兰'], mustNot: ['5000'] },
@@ -230,6 +232,16 @@ function pickArgs(argDefs) {
     const c = CASES[game];
     for (const m of c.must) check(text.includes(m), `${game}: prompt knows "${m}"`);
     for (const m of c.mustNot) check(!text.includes(m), `${game}: prompt does not contain "${m}"`);
+    if (c.worldMust || c.worldMustNot) {
+      if (gd.worldMods?.conversion) {
+        for (const m of c.worldMust || []) check(text.includes(m), `${game}: prompt knows "${m}"`);
+        for (const m of c.worldMustNot || []) check(!text.includes(m), `${game}: prompt does not contain "${m}"`);
+      } else {
+        console.log(`  skip ${game}: no alternate-world mod enabled in the game, its checks need one`);
+      }
+    }
+    // every character gets a speaking style
+    check(text.includes('## How You Speak') && !text.includes('{{speechStyle'), `${game}: prompt has a speaking style`);
     check(!/undefined|NaN|\[object Object\]/.test(text), `${game}: no undefined / NaN in the prompt`);
     check(text.trimEnd().endsWith('都译成那种语言。]') && text.includes("reply entirely in the language of the player's latest message"), `${game}: the language rule (the player's language) comes last`);
     check(offered.length > 0, `${game}: ${offered.length} actions offered: ${offered.join(', ')}`);

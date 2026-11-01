@@ -308,6 +308,8 @@
     "allowPrereleaseHelp": "启用后，您将收到测试版和预发布版本。这些版本可能不太稳定，但包含最新功能。",
     "egline": "如：",
     "ck3UserFolderClickToSelect": "点击以选择",
+    "consoleRun": "也通过游戏控制台执行动作（备用：回到游戏时程序替你在控制台输入 run votc.txt）",
+    "consoleRunHelp": "关闭：模组自己执行动作，不用控制台（需要调试模式）。打开：程序还会打开控制台输入执行命令，以防游戏没有读到动作。每个动作仍然只生效一次。",
     "gameTitle": "游戏",
     "gameFolderInstallHelp": "游戏安装目录（包含游戏 .exe 的文件夹），桥接文件会写在这里。",
     "gameFolderDocumentsHelp": "文档\\Paradox Interactive 下的游戏文件夹（包含 logs、mod 和 save games）。"

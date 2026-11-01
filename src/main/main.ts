@@ -457,6 +457,13 @@ const setupIpcHandlers = () => {
     return { id: activeGame().id, folder: settingsRepository.getCK3UserFolderPath() ?? null, warnings: initializationService.getWarnings() };
   });
 
+  // HOI4 / Stellaris: also apply actions through the console (optional fallback)
+  ipcMain.handle('game:setConsoleRun', (_, id: string, enabled: boolean) => {
+    if (id !== 'hoi4' && id !== 'stellaris') return;
+    settingsRepository.saveConsoleRun(id, enabled);
+    (getAdapter(id) as unknown as { refreshRunFiles?: () => void }).refreshRunFiles?.();
+  });
+
   // Paradox games: the player picks the conversation partner in the app
   ipcMain.handle('talk:listTargets', (_, tag?: string) => activeGame().listTalkTargets?.(tag) ?? []);
   ipcMain.handle('talk:start', (_, targetId: string) => {
@@ -1282,7 +1289,7 @@ function attachGame(game: GameAdapter): void {
   // Report actions the game rejected (e.g. not enough gold, character already dead)
   on('command-failed', (failure: CommandFailure) => {
     const conversation = conversationManager.getCurrentConversation();
-    conversation?.addSystemError(`Game action "${failure.op}" failed`, failure.message);
+    conversation?.addSystemError(failure.waiting ? `Game action "${failure.op}" is still waiting` : `Game action "${failure.op}" failed`, failure.message);
   });
   // CK3: the in-game Talk interaction
   on('talk', () => startConversation());

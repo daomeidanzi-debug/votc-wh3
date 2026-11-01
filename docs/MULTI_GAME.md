@@ -8,7 +8,7 @@
 | 全面战争：战锤3 | 选中角色/定居点/外交对象，按 **Ctrl+Alt+T** | 领主、英雄、外交对象、部队 | 自动（Lua 模组） | `votc_wh3.pack` |
 | 全面战争：三国 | 选中武将或城池，按 **Ctrl+Alt+T** | 武将、城池的主人 | 自动（Lua 模组） | `votc_3k.pack` |
 | 全面战争：阿提拉 | 选中将领、特工或城市，按 **Ctrl+Alt+T** | 将领、特工、城市的主人 | 自动（Lua 模组） | `votc_attila.pack` |
-| 钢铁雄心4 | 国家外交界面的 **“交谈（VOTC）”** 按钮，或顶栏下的 **“VOTC”** 按钮 | 各国领袖、顾问、将领、海军将领 | 自动：游戏每天自己执行；暂停时点一下 VOTC 按钮（需 `-debug`，不用控制台） | `votc_hoi4` |
+| 钢铁雄心4 | 国家外交界面的 **“交谈（VOTC）”** 按钮，或顶栏下的 **“VOTC”** 按钮 | 各国领袖、顾问、将领、海军将领 | 自动：游戏每天自己执行；暂停时点一下 VOTC 按钮（需调试模式，不用控制台） | `votc_hoi4` |
 | 维多利亚3 | 本国人物：**右键 →“交谈（VOTC）”**；外国人物：该国**外交行动**里的 **“交谈（VOTC）”**（游戏只给本国人物和流亡者显示人物互动） | 任何人物（本国、外国、流亡者） | 自动：模组每 2 秒自己执行（需 `-debug_mode`） | `votc_vic3` |
 | 欧陆风云5 | **右键任意人物 →“交谈（VOTC）”** | 任何人物（本国、外国） | 自动：模组每 2 秒自己执行（需 `-debug_mode`） | `votc_eu5` |
 | 群星 | 首都星球“决议”里的 **“开启通讯（VOTC）”** | 本国领袖、其他帝国统治者 | 自动：每个游戏月或点“开启通讯”时执行（需 `-debug_mode`，不用控制台，见下面的说明） | `votc_stellaris` |
@@ -23,7 +23,7 @@
 模组在程序安装目录的 `resources\mods` 里：
 
 - **战锤3 / 三国**：把 `.pack` 复制到游戏安装目录的 `data` 文件夹，在启动器的模组管理里勾选。设置里选**游戏安装目录**。
-- **钢铁雄心4 / 群星**：把 `mods\paradox\votc_hoi4`（或 `votc_stellaris`）文件夹和同名 `.mod` 文件复制到 `文档\Paradox Interactive\<游戏>\mod`，在启动器的播放集里启用；Steam 启动选项里加 `-debug`（钢铁雄心4）或 `-debug_mode`（群星），模组靠它执行动作。
+- **钢铁雄心4 / 群星**：把 `mods\paradox\votc_hoi4`（或 `votc_stellaris`）文件夹和同名 `.mod` 文件复制到 `文档\Paradox Interactive\<游戏>\mod`，在启动器的播放集里启用；用调试模式启动（`-debug_mode`）：在 Paradox 启动器里点“开始游戏”旁边的小箭头，选“以调试模式打开游戏”。Steam 的启动选项传不到游戏里。群星的启动器没有这一项，VOTC 安装时给它加了一个。
 - **维多利亚3 / 欧陆风云5**：把 `votc_vic3`（或 `votc_eu5`）文件夹复制到 `文档\Paradox Interactive\<游戏>\mod`，在启动器里启用；Steam 启动选项里加 `-debug_mode`（模组靠它执行动作）。
 - 这四个 Paradox 游戏在设置里选 **文档\Paradox Interactive\<游戏>**（程序一般能自动找到）。
 - **十字军之王3**：订阅创意工坊的 Voices of the Court，用 `-debug_mode` 启动。
@@ -72,7 +72,7 @@
 ## 动作是怎么执行的（Paradox 游戏）
 
 1. 模组每个游戏月、以及你在游戏里点“交谈”时，把相关国家和人物的情况写进游戏日志。
-2. 谈妥的事由程序写进模组里一个看不见的事件（`events/votc_commands.txt`），游戏的文件监视（`-debug` / `-debug_mode`）会自动重新载入它。**不用控制台**：
+2. 谈妥的事由程序写进模组里一个看不见的事件（`events/votc_commands.txt`），游戏的文件监视（调试模式 `-debug_mode`，在启动器“开始游戏”旁的小箭头里选“以调试模式打开游戏”）会自动重新载入它。**不用控制台**：
    - **维多利亚3 / 欧陆风云5**：模组里有个看不见的界面计时器，每 2 秒触发一次这个事件（暂停时也行）。
    - **钢铁雄心4**：每个游戏日触发一次；暂停时点一下“交谈（VOTC）”或顶栏的“VOTC”按钮也会触发。
    - **群星**：每个游戏月触发一次；点“开启通讯（VOTC）”决议也会触发。群星的文件监视可能默认关着，如果动作一直不生效，请告诉我。
@@ -101,7 +101,7 @@ The app is now **VOTC Multi** (formerly VOTC-WH3); settings, API keys and conver
 - **CK3**: the original Voices of the Court workshop mod. On top of the original app, every effect is confirmed through debug.log; actions that did not run, and script errors error.log reports for them, appear in the chat. Custom backstories work for CK3 characters (full name or `ck3_<id>.txt`).
 - **Warhammer III / Three Kingdoms**: select a character and press **Ctrl+Alt+T**.
 - **Victoria 3**: right-click one of your characters > **Talk (VOTC)**; foreign people through **Talk (VOTC)** in that country's diplomatic actions (the game lists character interactions only for your own characters and exiles). **EU5**: right-click any character > **Talk (VOTC)**. A hidden GUI timer of the mod applies agreed actions by itself every 2 seconds while some are pending, paused or not: it executes a scripted GUI that fires the mod's command event (the app rewrites that event and `-debug_mode` reloads it). Neither game uses the console, since a console command from the GUI can crash Victoria 3; the monthly pulse fires the same event as a fallback.
-- **HOI4**: **Talk (VOTC)** in a country's diplomacy view (its leader, advisors and commanders), or **VOTC** under the top bar (your own people). **Stellaris**: the **Open Communications (VOTC)** decision of your capital. No console is used: the app writes agreed actions into a hidden event of the mod, the file watcher reloads it (launch option `-debug` for HOI4, `-debug_mode` for Stellaris), and the mod fires it (HOI4: daily and from both buttons; Stellaris: monthly and from the decision).
+- **HOI4**: **Talk (VOTC)** in a country's diplomacy view (its leader, advisors and commanders), or **VOTC** under the top bar (your own people). **Stellaris**: the **Open Communications (VOTC)** decision of your capital. No console is used: the app writes agreed actions into a hidden event of the mod, the file watcher reloads it (debug mode, `-debug_mode`: choose "Open game in Debug Mode" next to Play in the Paradox Launcher; Steam launch options do not reach the game), and the mod fires it (HOI4: daily and from both buttons; Stellaris: monthly and from the decision).
 - **Ctrl+Alt+T** opens a list of everyone the game has reported: your people, heads of state, other characters.
 - **Attila**: select a general, agent or settlement and press **Ctrl+Alt+T**. The pack extends the game's own `lua_scripts/campaign_scripted.lua` (loaded for every campaign) instead of `scripting.lua`, so it does not clash with mods that replace `scripting.lua`. Attila's scripts cannot localise, so names travel as loc keys and the app looks them up in the game's and the enabled mods' `.loc` files.
 - **Civilization VI**: press **Ctrl+Alt+T** in a game and pick a leader you have met, a city-state, one of your governors or great people. The app talks to the game over FireTuner (`EnableTuner 1` in AppOptions.txt; Steam achievements are off while it is on): it fetches the mod's snapshot from the InGame state and runs agreed actions in GameCore_Tuner.

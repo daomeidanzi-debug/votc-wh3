@@ -18,7 +18,7 @@ on_actions = {
 		}
 	}
 	# apply the actions the VOTC app queued (events/votc_commands.txt, rewritten by the app and
-	# reloaded by the -debug file watcher); the event does nothing once everything has run
+	# reloaded by the file watcher of debug mode); the event does nothing once everything has run
 	on_daily = {
 		effect = {
 			if = {

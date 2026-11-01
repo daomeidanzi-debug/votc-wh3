@@ -7,7 +7,7 @@ import { findSteamGame, paradoxUserDir, exists, testWritable } from '../steam';
 import type {
   FolderDetection, GameAdapter, GameSetupWarning, LoadOptions, LoadResult, TalkTarget, WindowInfo,
 } from '../types';
-import { buildRunFile, compileCommand, PdxCommand, QueuedCommand, runFileEncoding } from './commands';
+import { buildConsoleFile, buildRunFile, compileCommand, PdxCommand, QueuedCommand, runFileEncoding } from './commands';
 import { buildGameDataFromPdx, personTargetId, talkTargets } from './buildGameData';
 import type { PdxProfile } from './profiles';
 import { personKey, SnapshotParser } from './snapshot';
@@ -31,6 +31,8 @@ const GUI_FALLBACK_MS = 12000;
 /** The game must have been in front this long before the app types into it. */
 const FOCUS_SETTLE_MS = 1200;
 const TYPE_RETRY_MS = 10000;
+/** an action still waiting after this long: tell the player what the game needs */
+const STUCK_HINT_MS = 45000;
 const MAX_TYPE_ATTEMPTS = 3;
 
 /** Older copies the game keeps when a log fills up: debug.log -> debug.1.log, debug.2.log... */
@@ -137,16 +139,20 @@ export class LogFollower {
  * Game -> app: the VOTC mod logs a snapshot of the player's country and the countries that
  * matter to it (monthly, on load, and when asked), see paradox/types.ts.
  * App -> game: whitelisted commands compiled to script (paradox/commands.ts) and written into
- * the mod's hidden command event, which the game's file watcher reloads (launch option
- * -debug / -debug_mode) and the mod fires by itself. No console is used. The game
+ * the mod's hidden command event, which the game's file watcher reloads (debug mode,
+ * -debug_mode) and the mod fires by itself. No console is used. The game
  * acknowledges every command, so the event can fire any number of times.
  *
  * Talking: in-game buttons / right-click interactions log a snapshot with a talk request
  * (and the characters involved); the adapter emits 'talk-request'.
  */
-/** The launch option that turns on the file watcher (HOI4 calls it -debug). */
-function debugFlag(game: string): string {
-  return game === 'hoi4' ? '-debug' : '-debug_mode';
+/**
+ * The launch option that turns on the file watcher. The Paradox Launcher ignores Steam's launch
+ * options (HOI4 started without the -debug the player had set); it passes -debug_mode with its own
+ * "Open game in Debug Mode" entry next to Play (the VOTC setup adds one for Stellaris).
+ */
+function debugFlag(_game: string): string {
+  return '-debug_mode';
 }
 
 export class ParadoxAdapter extends EventEmitter implements GameAdapter {
@@ -161,6 +167,8 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
   private parser: SnapshotParser;
   protected snapshot: PdxSnapshot | null = null;
   private pending: Array<QueuedCommand & { queuedAt: number }> = [];
+  /** the "not applied yet" hint was shown for the current queue */
+  private stuckHinted = false;
   private lastSeq = 0;
   protected people = new Map<string, PdxPerson>();
   private gameFocused: () => boolean = () => false;
@@ -242,7 +250,7 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
       warnings.push({
         type: 'debug_mode',
         message: `${this.profile.name.en} applies agreed actions only with the ${debugFlag(this.profile.id)} launch option`,
-        suggestion: `In Steam: right-click ${this.profile.name.en} > Properties > Launch options, enter ${debugFlag(this.profile.id)}. The game then reloads the mod's action file by itself; no console is used.`,
+        suggestion: `In the Paradox Launcher, click the arrow next to Play and choose "Open game in Debug Mode" (${debugFlag(this.profile.id)}; Steam launch options do not reach the game). The game then reloads the mod's action file by itself; no console is used.`,
       });
     }
     const err = testWritable(dir);
@@ -338,6 +346,7 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
     const before = this.pending.length;
     this.pending = this.pending.filter((p) => p.seq > seq);
     if (this.pending.length !== before) {
+      this.stuckHinted = false;
       this.diagnostic(`game acknowledged commands up to #${seq}`);
       this.typeAttempts = 0;
       this.writeRunFiles();
@@ -438,6 +447,7 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
   }
 
   get runCommand(): string {
+    if (this.consoleMode) return this.profile.consoleRun!.command;
     return this.profile.runCommand;
   }
 
@@ -451,8 +461,21 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
    * game has been in front for a moment ('keys' games), or when the mod's own GUI timer has
    * not answered in time ('gui' games, e.g. without the -debug_mode launch option).
    */
+  /** HOI4 / Stellaris: the player turned on the console way in the settings */
+  get consoleMode(): boolean {
+    return !!this.profile.consoleRun && settingsRepository.getConsoleRun(this.profile.id);
+  }
+
+  /** The settings changed: write (or empty) the console file at once. */
+  refreshRunFiles(): void {
+    this.writeRunFiles();
+  }
+
   private autoRun(): void {
-    if (this.profile.consoleTyping === false) return;
+    if (this.profile.consoleTyping === false && !this.consoleMode) {
+      this.hintIfStuck();
+      return;
+    }
     if (this.pending.length === 0 || !this.gameFocused()) {
       this.focusedSince = 0;
       return;
@@ -464,9 +487,31 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
     if (this.profile.autoRun === 'gui' && now - this.pending[0].queuedAt < GUI_FALLBACK_MS) return;
     this.typeAttempts++;
     this.lastTypeAt = now;
-    this.diagnostic(`typing "${this.profile.runCommand}" into the game console (attempt ${this.typeAttempts})`);
-    void typeConsoleCommand(this.profile.runCommand).then((sent) => {
+    const command = this.runCommand;
+    this.diagnostic(`typing "${command}" into the game console (attempt ${this.typeAttempts})`);
+    void typeConsoleCommand(command).then((sent) => {
       if (!sent) this.diagnostic('could not type into the game console');
+    });
+  }
+
+  /**
+   * The mod applies queued actions only when the game reloads its action file, which needs the
+   * debug mode (-debug_mode). Say so once when an action waits too long, instead of
+   * failing silently (HOI4 was started outside debug mode and nothing happened).
+   */
+  private hintIfStuck(): void {
+    if (!this.pending.length || this.stuckHinted || Date.now() - this.pending[0].queuedAt < STUCK_HINT_MS) return;
+    this.stuckHinted = true;
+    const flag = debugFlag(this.profile.id);
+    const when: Record<string, string> = {
+      hoi4: 'let one in-game day pass, or click a VOTC button in the game / 让游戏时间走一天，或在游戏里点一下 VOTC 按钮',
+      stellaris: 'let one in-game month pass, or use the "Open communications (VOTC)" decision / 让游戏过一个月，或点一次“开启通讯（VOTC）”决议',
+    };
+    this.diagnostic(`action #${this.pending[0].seq} not applied after ${STUCK_HINT_MS / 1000}s`);
+    this.emit('command-failed', {
+      op: this.pending[0].op,
+      waiting: true,
+      message: `not applied yet. Start ${this.profile.name.en} in debug mode (${flag}): in the Paradox Launcher click the arrow next to Play and choose "Open game in Debug Mode" (Steam launch options do not reach the game); ${when[this.profile.id] ?? 'it applies within seconds'}. / 还没生效：请用调试模式启动游戏：在 Paradox 启动器里点“开始游戏”旁边的小箭头，选“以调试模式打开游戏”（Steam 的启动选项传不到游戏里）。`,
     });
   }
 
@@ -492,15 +537,23 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
 
   private writeRunFiles(): void {
     const content = (runFileEncoding(this.profile.id).bom ? '\uFEFF' : '') + buildRunFile(this.profile.id, this.pending);
+    const files: Array<[string, string]> = this.runFilePaths().map((f) => [f, content]);
+    // the optional console way: its own file (empty when off, so an old one cannot run again)
     const dir = this.userDir();
-    for (const file of this.runFilePaths()) {
+    if (this.profile.consoleRun && dir) {
+      const text = this.consoleMode ? buildConsoleFile(this.profile.id, this.pending) : '';
+      for (const rel of this.profile.consoleRun.files) {
+        const file = path.join(dir, rel);
+        if (text || exists(file)) files.push([file, text]);
+      }
+    }
+    for (const [file, text] of files) {
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        // write and rename, so the game (or its file watcher) never reads half a file; the
-        // temporary file stays outside the mod folder, which the file watcher watches
-        const tmp = dir && file.startsWith(dir) ? path.join(dir, `.votc_${path.basename(file)}.tmp`) : `${file}.tmp`;
-        fs.writeFileSync(tmp, content, 'utf-8');
-        fs.renameSync(tmp, file);
+        // written in place: the games' file watchers react to a file being written, not to one
+        // renamed over it (HOI4 never reloaded the event while the app wrote it via a temp file).
+        // The file is small; if a watcher reads it half written, the end of the write reloads it again.
+        fs.writeFileSync(file, text, 'utf-8');
       } catch (error) {
         // the install folder may be read-only; the user folder copy is enough
         console.warn(`ParadoxAdapter: could not write ${file}:`, error);

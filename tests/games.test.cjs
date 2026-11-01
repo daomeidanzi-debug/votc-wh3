@@ -59,7 +59,9 @@ fs.writeFileSync(path.join(STUBS, 'settings.js'), `
   module.exports = { settingsRepository: {
     getCK3UserFolderPath: () => folders[game] || null, setCK3UserFolderPath: (d) => { folders[game] = d; },
     getActiveGame: () => game, setActiveGame: (g) => { game = g; }, getLanguage: () => 'en',
-  } };`);
+    getConsoleRun: (g) => !!consoleRun[g], saveConsoleRun: (g, on) => { consoleRun[g] = on; },
+  } };
+  const consoleRun = {};`);
 fs.writeFileSync(path.join(STUBS, 'uuid.js'), `module.exports = { v4: () => require('crypto').randomUUID() };`);
 const origResolve = Module._resolveFilename;
 Module._resolveFilename = function (request, parent, ...rest) {
@@ -112,18 +114,54 @@ function parse(lines) {
 }
 
 (async () => {
+  await section('speaking styles', () => {
+    const { speechStyle } = load('conversation/speechStyle.js');
+    const ch = (o) => ({ isRuler: false, primaryTitle: '', titleRankConcept: '', personality: '', culture: '', house: '', faith: '', age: 40, ...o });
+    const marshal = speechStyle('hoi4', ch({ pdx: { person: { title: 'Field Marshal', facts: { ideology: '法西斯主义' } }, country: { government: 'Fascism', facts: {} } } }));
+    const fdr = speechStyle('hoi4', ch({ isRuler: true, pdx: { person: { title: 'Head of State', facts: { ideology: '自由主义' } }, country: { government: '民主主义', facts: {} } } }));
+    check(/soldier/.test(marshal) && /Fascist/.test(marshal) && /1930s/.test(marshal), 'a fascist field marshal: soldier and fascist voice');
+    check(/whole realm/.test(fdr) && /democratic/.test(fdr) && !/Fascist/.test(fdr), 'a democratic head of state sounds different');
+    const hive = speechStyle('stellaris', ch({ isRuler: true, pdx: { person: { title: 'Ruler', facts: {} }, country: { government: 'Hive Mind', facts: { ethics: 'Gestalt Consciousness' } } } }));
+    check(/say "we"/.test(hive) && /spacefaring/.test(hive), 'a Stellaris hive mind says "we"');
+    const orc = speechStyle('wh3', ch({ culture: '绿皮', titleRankConcept: 'Lord', personality: 'Cruel' }));
+    const dwarf = speechStyle('wh3', ch({ culture: 'Dwarfs', titleRankConcept: 'Hero' }));
+    check(/WAAAGH/.test(orc) && /Cruel/.test(orc) && /grudges/.test(dwarf) && !/grudges/.test(orc), 'Total War races get their own voices');
+    const soldier = speechStyle('attila', ch({ culture: 'Goths', titleRankConcept: '', primaryTitle: 'Soldier of the Gothic Spearmen regiment' }));
+    check(/common soldier/.test(soldier) && /barbarian people/.test(soldier), 'an Attila soldier speaks as a Goth soldier');
+    // mods: the mod's world sets the register; an ideology the keywords do not know still counts
+    const tno = speechStyle('hoi4', ch({ pdx: { person: { title: 'Advisor', facts: { ideology: 'Burgundian System' } }, country: { government: 'Burgundian System', facts: {} } } }),
+      { conversion: { name: 'The New Order', setting: 'a 1962 world where the Axis won', alternate: true }, others: [] });
+    check(/The New Order/.test(tno) && /not the real history/.test(tno) && !/1930s/.test(tno) && /Burgundian System/.test(tno), 'a mod world and a mod ideology shape the voice');
+    const whMod = speechStyle('ck3', ch({ culture: 'Skaven', faith: 'Horned Rat' }), { conversion: { name: 'Warhammer', setting: 'the Warhammer world', alternate: true }, others: [] });
+    check(/yes-yes/.test(whMod), 'races apply in a total conversion of another game');
+    for (const f of ['paradox/default.hbs', 'wh3/default.hbs', 'tk/default.hbs', 'attila/default.hbs', 'ck3/default.hbs', 'default.hbs']) {
+      check(fs.readFileSync(path.join(REPO, 'default_userdata', 'prompts', 'system', f), 'utf-8').includes('## How You Speak\n{{speechStyle gameData id}}'), `${f}: has the speaking style`);
+    }
+  });
+
   await section('EU5 names and log', () => {
     const { stripTextCodes } = load('games/paradox/snapshot.js');
     const X = String.fromCharCode(0x15);
     check(stripTextCodes(`VOTC|P|leader|${X}TOOLTIP:CHARACTER,512 ${X}L; Philippe VI${X}!${X}!`) === 'VOTC|P|leader|Philippe VI', 'tooltip codes are stripped from names');
     check(stripTextCodes(`VOTC|P|name|${X}TOOLTIP:COUNTRY,4294967295 ${X}L; Country${X}!${X}!`) === 'VOTC|P|name|', 'an empty object counts as missing');
     check(stripTextCodes(`VOTC|CH|FRA|Jeanne|title|${X}e; ${X}TOOLTIP:GAME_CONCEPT,courtier ${X}L; Courtier${X}!${X}!`) === 'VOTC|CH|FRA|Jeanne|title|Courtier', 'styled text keeps its words');
-    // EU5 resolves saved scopes by name in log text; SCOPE.sCountry(...) gave empty objects
+    // EU5 log text sees neither SCOPE.sCountry(...) (empty objects) nor saved scope names
+    // ("Failed to find type 'votc_c'"): the scopes are read from global variables
     const dir = path.join(REPO, 'paradox_mods', 'votc_eu5', 'in_game', 'common');
     const all = ['scripted_effects', 'on_action', 'scripted_triggers'].flatMap((d) => fs.readdirSync(path.join(dir, d)).map((f) => fs.readFileSync(path.join(dir, d, f), 'utf-8'))).join('\n');
-    check(!all.includes('SCOPE.s') && all.includes('[votc_p.GetTag]') && !/\.GetName\]/.test(all), 'eu5: log text uses saved scopes and names without tooltips');
+    check(!all.includes('SCOPE.s') && !/\[votc_/.test(all) && all.includes("[GetGlobalVariable('votc_p').GetCountry.GetTag]") && !/\.GetName\]/.test(all), 'eu5: log text reads scopes from globals, names without tooltips');
+    for (const name of ['votc_p', 'votc_o', 'votc_c', 'votc_rel']) {
+      check(new RegExp(`save_scope_as = ${name}\n\t+set_global_variable = \{ name = ${name} value = this \}`).test(all), `eu5: ${name} is also kept as a global`);
+    }
     check(!all.includes('debug_log') && all.includes('error_log = "VOTC|BEGIN'), 'eu5: logs with error_log (debug.log is written late)');
     check(PDX_PROFILES.eu5.logFiles.join() === 'logs/error.log', 'eu5: the app reads error.log');
+    {
+      const { SnapshotParser } = load('games/paradox/snapshot.js');
+      const got = [];
+      const parser = new SnapshotParser({ onSnapshot: (s) => got.push(s) });
+      for (const l of ['VOTC|BEGIN|eu5|2|talk', "[20:08:56][pdx_data_localize.cpp:192]: Data error in loc string 'VOTC|P|tag|[votc_p.GetTag]'", 'VOTC|P|tag|FRA', 'VOTC|END']) parser.feed(`[x][y]: ${l}`);
+      check(got.length === 1 && got[0].player.tag === 'FRA', 'eu5: quoted lines of loc errors are not data');
+    }
   });
 
   await section('snapshot parser', () => {
@@ -186,7 +224,7 @@ function parse(lines) {
     const stel = buildRunFile('stellaris', [{ seq: 3, op: 'refresh', compiled: compileCommand('stellaris', { op: 'refresh' }) }]);
     check(/^namespace = votc_cmd$/m.test(stel) && /\thide_window = yes\n\tis_triggered_only = yes/.test(stel) && !/^effect /m.test(stel), 'stellaris: a hidden event, no console');
     for (const [game, dir] of [['hoi4', 'votc_hoi4'], ['stellaris', 'votc_stellaris']]) {
-      check(fs.readFileSync(path.join(REPO, 'paradox_mods', dir, 'events', 'votc_commands.txt'), 'utf-8').replace(/\r/g, '') === '\uFEFF' + buildRunFile(game, []), `${game}: the shipped event file equals an empty queue`);
+      check(fs.readFileSync(path.join(REPO, 'paradox_mods', dir, 'events', 'votc_commands.txt'), 'utf-8').replace(/\r/g, '') === buildRunFile(game, []), `${game}: the shipped event file equals an empty queue`);
       check(PDX_PROFILES[game].consoleTyping === false && PDX_PROFILES[game].autoRun === 'gui' && PDX_PROFILES[game].needsDebugMode && PDX_PROFILES[game].runFiles.user[0].replace(/\\/g, '/') === `mod/${dir}/events/votc_commands.txt`, `${game}: the app writes the mod event, never the console`);
     }
     const hoiOn = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_hoi4', 'common', 'on_actions', 'votc_on_actions.txt'), 'utf-8');
@@ -237,7 +275,14 @@ function parse(lines) {
     check(/trigger_event = \{ id = votc_cmd\.1 \}/.test(onActions), 'vic3: the monthly pulse applies the actions in the game thread');
     check(['vic3', 'eu5', 'hoi4', 'stellaris'].every((g) => PDX_PROFILES[g].consoleTyping === false), 'the app never types into the console');
     const { runFileEncoding } = load('games/paradox/commands.js');
-    check(['vic3', 'eu5', 'hoi4', 'stellaris'].every((g) => runFileEncoding(g).bom) && !runFileEncoding('civ6').bom, 'the event file is written with a byte order mark');
+    // Stellaris misread a BOM before the first comment and rejected every event of the file
+    check(runFileEncoding('vic3').bom && runFileEncoding('eu5').bom && !runFileEncoding('hoi4').bom && !runFileEncoding('stellaris').bom, 'only Victoria 3/EU5 event files get a byte order mark');
+    for (const dir of ['votc_hoi4', 'votc_stellaris']) {
+      const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+      const withBom = walk(path.join(REPO, 'paradox_mods', dir)).filter((f) => f.endsWith('.txt') && fs.readFileSync(f)[0] === 0xef);
+      check(withBom.length === 0, `${dir}: no script file starts with a byte order mark`);
+    }
+    check(!/option = /.test(buildRunFile('stellaris', [])) && /option = \{ name = votc_cmd\.1\.a \}/.test(buildRunFile('hoi4', [])), 'only the HOI4 event has an option');
     const vic3Shipped = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'events', 'votc_commands.txt'), 'utf-8').replace(/\r/g, '');
     check(vic3Shipped === '\uFEFF' + vic3Empty, 'vic3: the shipped event file equals an empty queue');
     check(buildRunFile('civ6', []) === '', 'Civilization VI writes no file');
@@ -315,16 +360,35 @@ function parse(lines) {
     hoi4.runGameEffect({ op: 'opinion', a: 'GER', b: 'ENG', amount: 20 });
     let threw = false; try { hoi4.runGameEffect('GER = { annex_country = { target = ENG } }'); } catch { threw = true; }
     check(threw, 'raw script is refused');
+    // an action the game has not picked up (not in debug mode: the file is never reloaded) is reported once
+    const waiting = [];
+    hoi4.on('command-failed', (f) => { if (f.waiting) waiting.push(f); });
+    hoi4.pending[0].queuedAt -= 60000;
+    await new Promise((res) => setTimeout(res, 1600));
+    check(waiting.length === 1 && waiting[0].op === 'opinion' && /-debug_mode/.test(waiting[0].message) && /以调试模式打开游戏/.test(waiting[0].message), 'a waiting action says how to start debug mode, once');
     const runFile = path.join(USER_DIR, 'mod', 'votc_hoi4', 'events', 'votc_commands.txt');
     const content = fs.readFileSync(runFile, 'utf-8');
-    check(content.startsWith('\uFEFF') && content.includes('votc_opinion_good'), 'the command event is written into the mod');
+    check(!content.startsWith('\uFEFF') && content.includes('votc_opinion_good'), 'the command event is written into the mod');
     check(pending[pending.length - 1] === 1, 'pending count reported');
+    const runFileId = fs.statSync(runFile, { bigint: true }).ino;
+    // optional console way (settings): also a console file and the `run` command; off empties it
+    check(hoi4.runCommand === 'event votc_cmd.1' && !fs.existsSync(path.join(USER_DIR, 'votc.txt')), 'no console file by default');
+    settings.saveConsoleRun('hoi4', true);
+    hoi4.refreshRunFiles();
+    const consoleText = fs.readFileSync(path.join(USER_DIR, 'votc.txt'), 'utf-8');
+    check(hoi4.runCommand === 'run votc.txt' && consoleText.split('\n').filter(Boolean).every((l) => l.startsWith('eval_effect ')) && consoleText.includes('votc_opinion_good')
+      && fs.readFileSync(path.join(USER_DIR, 'run', 'votc.txt'), 'utf-8') === consoleText, 'console way on: console file written where `run` looks');
+    settings.saveConsoleRun('hoi4', false);
+    hoi4.refreshRunFiles();
+    check(fs.readFileSync(path.join(USER_DIR, 'votc.txt'), 'utf-8') === '' && hoi4.runCommand === 'event votc_cmd.1', 'console way off: the console file is emptied');
     const seq = Number(/VOTC\|ACK\|(\d+)/.exec(content)[1]);
     const failed = [];
     hoi4.on('command-failed', (f) => failed.push(f));
     fs.appendFileSync(path.join(USER_DIR, 'logs', 'game.log'), `[x][y]: VOTC|RES|${seq}|fail|opinion\n[x][y]: VOTC|ACK|${seq}\n`);
     await new Promise((res) => setTimeout(res, 1000));
-    check(fs.readFileSync(runFile, 'utf-8') === '\uFEFF' + buildRunFile('hoi4', []) && pending[pending.length - 1] === 0, 'acknowledged commands leave the file');
+    check(fs.readFileSync(runFile, 'utf-8') === buildRunFile('hoi4', []) && pending[pending.length - 1] === 0, 'acknowledged commands leave the file');
+    // the file watchers react to a file being written, not to one renamed over it
+    check(fs.statSync(runFile, { bigint: true }).ino === runFileId, 'the command event is rewritten in place');
     check(failed.length === 1 && failed[0].op === 'opinion', 'failed outcome reported');
     // game restarted: a new, shorter log
     fs.writeFileSync(path.join(USER_DIR, 'logs', 'game.log'), HOI4_LOG.join('\n').replace('482913', '111111') + '\n');

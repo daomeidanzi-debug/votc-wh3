@@ -134,7 +134,7 @@ def main():
     ]
     for path, text in ((OUT, EFFECTS), (EVENTS, ''.join(events))):
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8-sig', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(text)
         print('wrote', path)
 

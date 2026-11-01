@@ -1,4 +1,4 @@
-# VOTC Bridge (GPL-3.0, see LICENSE.txt). The list below is appended to the
+﻿# VOTC Bridge (GPL-3.0, see LICENSE.txt). The list below is appended to the
 # game's own monthly pulse; the effect lives in our own on_action so nothing is overwritten.
 
 # Root = Country

@@ -128,15 +128,18 @@ export function activeGame(): GameAdapter {
 }
 
 /** For the settings UI: every supported game. */
-export function listGames(lang: string): Array<{ id: GameId; name: string; folderKind: string; folderExample: string; talkHint: string }> {
+export function listGames(lang: string): Array<{ id: GameId; name: string; folderKind: string; folderExample: string; talkHint: string; consoleOption: boolean; consoleRun: boolean }> {
   return GAME_IDS.map((id) => {
     const a = getAdapter(id);
+    const consoleOption = id === 'hoi4' || id === 'stellaris';
     return {
       id,
       name: lang === 'zh' ? a.name.zh : a.name.en,
       folderKind: a.folderKind,
       folderExample: a.folderExample,
       talkHint: lang === 'zh' ? a.talkHint.zh : a.talkHint.en,
+      consoleOption,
+      consoleRun: consoleOption && settingsRepository.getConsoleRun(id),
     };
   });
 }

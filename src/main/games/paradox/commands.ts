@@ -574,7 +574,7 @@ function markDone(game: PdxGame, seq: number): string {
  * for the random generator ("Random is blocked by thread"), which crashes Victoria 3, and
  * players do not want the console opened over HOI4 or Stellaris.
  * The commands go into a hidden event of the mod (events/votc_commands.txt); the -debug_mode
- * (HOI4: -debug) file watcher reloads it when it changes. Victoria 3/EU5: the mod's runner fires
+ * file watcher reloads it when it changes. Victoria 3/EU5: the mod's runner fires
  * it through a scripted GUI every 2 seconds; HOI4 (no GUI timer): the daily pulse and the mod's
  * VOTC buttons fire it; Stellaris: the monthly pulse and the talk decision. The event's own trigger is false once the newest command has run, so
  * firing it then does nothing. Nothing else is rewritten while the game runs: reloading
@@ -611,7 +611,8 @@ function eventFile(game: EventGame, queue: QueuedCommand[]): string {
       '\timmediate = {',
       ...body,
       '\t}',
-      `\toption = { name = ${VIC3_EVENT}.a }`,
+      // hidden Stellaris events need no option (and its text key would be missing)
+      ...(game === 'hoi4' ? [`\toption = { name = ${VIC3_EVENT}.a }`] : []),
       '}',
       '',
     ].join('\n');
@@ -637,9 +638,12 @@ function eventFile(game: EventGame, queue: QueuedCommand[]): string {
   ].join('\n');
 }
 
-/** The games read script files as UTF-8 with a byte order mark. */
+/**
+ * Victoria 3/EU5 want script files as UTF-8 with a byte order mark. HOI4/Stellaris must not get
+ * one: Stellaris then misread the comment on the first line and rejected every event of the file.
+ */
 export function runFileEncoding(game: PdxGame): { bom: boolean } {
-  return { bom: isEventGame(game) };
+  return { bom: game === 'vic3' || game === 'eu5' };
 }
 
 /** One guarded command, as a single line of script. */
@@ -656,4 +660,18 @@ export function guardedScript(game: PdxGame, q: QueuedCommand): string {
 export function buildRunFile(game: PdxGame, queue: QueuedCommand[]): string {
   // Civilization VI gets its commands over FireTuner, not from a file
   return isEventGame(game) ? eventFile(game, queue) : '';
+}
+
+/**
+ * The optional console way (HOI4, Stellaris): one console command per line for `run votc.txt`.
+ * The same guarded commands as the event, so whichever runs first applies them once.
+ */
+export function buildConsoleFile(game: PdxGame, queue: QueuedCommand[]): string {
+  if (queue.length === 0 || (game !== 'hoi4' && game !== 'stellaris')) return '';
+  const last = Math.max(...queue.map((q) => q.seq));
+  const statements = queue.map((q) => guardedScript(game, q));
+  statements.push(logEffect(game, `VOTC|ACK|${last}`));
+  // HOI4 eval_effect / Stellaris effect run inline script; every statement must fit on its line
+  const prefix = game === 'hoi4' ? 'eval_effect' : 'effect';
+  return statements.map((st) => `${prefix} ${st}`).join('\n') + '\n';
 }

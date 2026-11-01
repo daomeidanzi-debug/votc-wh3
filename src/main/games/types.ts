@@ -87,6 +87,8 @@ export interface EffectContext {
 export interface CommandFailure {
   op: string;
   message: string;
+  /** not failed, only not applied yet (the game has not picked it up) */
+  waiting?: boolean;
 }
 
 /** A conversation partner offered in the app's picker. */

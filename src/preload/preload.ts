@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('gameAPI', {
   listGames: (): Promise<Array<{ id: string; name: string; folderKind: string; folderExample: string; talkHint: string }>> =>
     ipcRenderer.invoke('game:list'),
   getActiveGame: (): Promise<{ id: string; folder: string | null }> => ipcRenderer.invoke('game:getActive'),
+  setConsoleRun: (id: string, enabled: boolean): Promise<void> => ipcRenderer.invoke('game:setConsoleRun', id, enabled),
   setActiveGame: (id: string): Promise<{ id: string; folder: string | null; warnings: Array<{ type: string; message: string; suggestion?: string }> }> =>
     ipcRenderer.invoke('game:setActive', id),
   listTalkTargets: (tag?: string): Promise<Array<{ id: string; name: string; leader: string; leaderTitle: string; status: string; group?: 'own' | 'leaders' | 'people' }>> =>

@@ -203,6 +203,11 @@ const schema: Schema<AppSettings> = {
   allowPrerelease: {
     type: 'boolean',
     default: false
+  },
+  // HOI4 / Stellaris: also apply actions through the game console (game id -> on)
+  consoleRunByGame: {
+    type: 'object',
+    default: {}
   }
 };
 
@@ -538,6 +543,18 @@ export class SettingsRepository {
   saveLanguage(language: string): void {
     this.store.set('language', language);
     console.log('Language setting saved:', language);
+  }
+
+  /** HOI4 / Stellaris: the player chose the console way as well (off by default). */
+  getConsoleRun(game: string): boolean {
+    const all = (this.store.get('consoleRunByGame', {}) ?? {}) as Record<string, boolean>;
+    return !!all[game];
+  }
+
+  saveConsoleRun(game: string, enabled: boolean): void {
+    const all = { ...((this.store.get('consoleRunByGame', {}) ?? {}) as Record<string, boolean>), [game]: enabled };
+    this.store.set('consoleRunByGame', all);
+    console.log(`Console way for ${game} saved:`, enabled);
   }
 
   getAllowPrerelease(): boolean {

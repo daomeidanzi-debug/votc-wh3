@@ -308,6 +308,8 @@
     "allowPrereleaseHelp": "When enabled, you will receive beta and pre-release versions. These may be less stable but include the latest features.",
     "egline": "e.g.",
     "ck3UserFolderClickToSelect": "click to select",
+    "consoleRun": "Also apply actions through the game console (fallback: types \"run votc.txt\" into the console when the game is in front)",
+    "consoleRunHelp": "Off: the mod applies actions by itself, without the console (needs debug mode). On: the app also opens the console and types the run command, in case the game does not pick up the actions. Each action still applies only once.",
     "gameTitle": "Game",
     "gameFolderInstallHelp": "The game install folder (the one with the game .exe). The bridge files are written there.",
     "gameFolderDocumentsHelp": "The game folder in Documents\\Paradox Interactive (with logs, mod and save games)."

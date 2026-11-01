@@ -1,7 +1,8 @@
-# VOTC Bridge for Europa Universalis V (GPL-3.0, see LICENSE.txt).
+﻿# VOTC Bridge for Europa Universalis V (GPL-3.0, see LICENSE.txt).
 # Line format: see src/main/games/paradox/types.ts in the VOTC source.
 # The player's country is saved as scope:votc_player, so these effects also work where
-# root is something else (character interactions).
+# root is something else (character interactions). Log text cannot read saved scopes, so
+# the scopes it names are also kept in global variables (GetGlobalVariable(...).GetCountry).
 
 votc_ensure_campaign_id = {
 	if = {
@@ -29,15 +30,16 @@ votc_snapshot_open = {
 	votc_ensure_campaign_id = yes
 	save_scope_as = votc_player
 	save_scope_as = votc_p
+	set_global_variable = { name = votc_p value = this }
 	error_log = "VOTC|BEGIN|eu5|2|$REASON$"
 	error_log = "VOTC|META|campaign|[GetGlobalVariable('votc_campaign').GetValue|0]"
 	error_log = "VOTC|META|seq|[GetGlobalVariable('votc_seq').GetValue|0]"
 	error_log = "VOTC|META|date|[GetDateString]"
-	error_log = "VOTC|P|tag|[votc_p.GetTag]"
-	error_log = "VOTC|P|name|[votc_p.GetNameWithNoTooltip]"
-	error_log = "VOTC|P|leader|[votc_p.GetGovernment.GetRulerOrRegent.GetNameWithNoTooltip]"
-	error_log = "VOTC|P|leader_title|[votc_p.GetGovernment.GetRulerTitle]"
-	error_log = "VOTC|P|capital|[votc_p.GetCapital.GetNameWithNoTooltip]"
+	error_log = "VOTC|P|tag|[GetGlobalVariable('votc_p').GetCountry.GetTag]"
+	error_log = "VOTC|P|name|[GetGlobalVariable('votc_p').GetCountry.GetNameWithNoTooltip]"
+	error_log = "VOTC|P|leader|[GetGlobalVariable('votc_p').GetCountry.GetGovernment.GetRulerOrRegent.GetNameWithNoTooltip]"
+	error_log = "VOTC|P|leader_title|[GetGlobalVariable('votc_p').GetCountry.GetGovernment.GetRulerTitle]"
+	error_log = "VOTC|P|capital|[GetGlobalVariable('votc_p').GetCountry.GetCapital.GetNameWithNoTooltip]"
 	if = {
 		limit = { is_great_power = yes }
 		error_log = "VOTC|P|great_power|yes"
@@ -46,12 +48,14 @@ votc_snapshot_open = {
 	every_country = {
 		limit = { is_at_war_with = scope:votc_player }
 		save_scope_as = votc_o
-		error_log = "VOTC|P|war_with|[votc_o.GetNameWithNoTooltip]"
+		set_global_variable = { name = votc_o value = this }
+		error_log = "VOTC|P|war_with|[GetGlobalVariable('votc_o').GetCountry.GetNameWithNoTooltip]"
 	}
 	every_country = {
 		limit = { is_allied_with = { target = scope:votc_player } }
 		save_scope_as = votc_o
-		error_log = "VOTC|P|allies|[votc_o.GetNameWithNoTooltip]"
+		set_global_variable = { name = votc_o value = this }
+		error_log = "VOTC|P|allies|[GetGlobalVariable('votc_o').GetCountry.GetNameWithNoTooltip]"
 	}
 	every_country = {
 		limit = { votc_is_relevant_country = yes }
@@ -61,77 +65,86 @@ votc_snapshot_open = {
 
 votc_snapshot_close = {
 	error_log = "VOTC|END"
+	# the log text reads scopes from these globals; votc_talker stays (character commands)
+	remove_global_variable = votc_p
+	remove_global_variable = votc_o
+	remove_global_variable = votc_c
+	remove_global_variable = votc_talker_country
+	remove_global_variable = votc_rel
 }
 
 # THIS = the country, scope:votc_player = the player's country
 votc_log_country = {
 	save_scope_as = votc_c
-	error_log = "VOTC|C|[votc_c.GetTag]|name|[votc_c.GetNameWithNoTooltip]"
-	error_log = "VOTC|C|[votc_c.GetTag]|leader|[votc_c.GetGovernment.GetRulerOrRegent.GetNameWithNoTooltip]"
-	error_log = "VOTC|C|[votc_c.GetTag]|leader_title|[votc_c.GetGovernment.GetRulerTitle]"
-	error_log = "VOTC|C|[votc_c.GetTag]|capital|[votc_c.GetCapital.GetNameWithNoTooltip]"
+	set_global_variable = { name = votc_c value = this }
+	error_log = "VOTC|C|[GetGlobalVariable('votc_c').GetCountry.GetTag]|name|[GetGlobalVariable('votc_c').GetCountry.GetNameWithNoTooltip]"
+	error_log = "VOTC|C|[GetGlobalVariable('votc_c').GetCountry.GetTag]|leader|[GetGlobalVariable('votc_c').GetCountry.GetGovernment.GetRulerOrRegent.GetNameWithNoTooltip]"
+	error_log = "VOTC|C|[GetGlobalVariable('votc_c').GetCountry.GetTag]|leader_title|[GetGlobalVariable('votc_c').GetCountry.GetGovernment.GetRulerTitle]"
+	error_log = "VOTC|C|[GetGlobalVariable('votc_c').GetCountry.GetTag]|capital|[GetGlobalVariable('votc_c').GetCountry.GetCapital.GetNameWithNoTooltip]"
 	if = {
 		limit = { is_great_power = yes }
-		error_log = "VOTC|C|[votc_c.GetTag]|great_power|yes"
+		error_log = "VOTC|C|[GetGlobalVariable('votc_c').GetCountry.GetTag]|great_power|yes"
 	}
 	# its wars and alliances with anyone (the world situation)
 	every_country = {
 		limit = { is_at_war_with = scope:votc_c }
 		save_scope_as = votc_o
-		error_log = "VOTC|C|[votc_c.GetTag]|war_with|[votc_o.GetNameWithNoTooltip]"
+		set_global_variable = { name = votc_o value = this }
+		error_log = "VOTC|C|[GetGlobalVariable('votc_c').GetCountry.GetTag]|war_with|[GetGlobalVariable('votc_o').GetCountry.GetNameWithNoTooltip]"
 	}
 	every_country = {
 		limit = { is_allied_with = { target = scope:votc_c } }
 		save_scope_as = votc_o
-		error_log = "VOTC|C|[votc_c.GetTag]|allies|[votc_o.GetNameWithNoTooltip]"
+		set_global_variable = { name = votc_o value = this }
+		error_log = "VOTC|C|[GetGlobalVariable('votc_c').GetCountry.GetTag]|allies|[GetGlobalVariable('votc_o').GetCountry.GetNameWithNoTooltip]"
 	}
 	if = {
 		limit = { is_at_war_with = scope:votc_player }
-		error_log = "VOTC|R|[votc_c.GetTag]|war|yes"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|war|yes"
 	}
 	if = {
 		limit = { is_allied_with = { target = scope:votc_player } }
-		error_log = "VOTC|R|[votc_c.GetTag]|ally|yes"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|ally|yes"
 	}
 	if = {
 		limit = { OR = { is_rival_of = scope:votc_player scope:votc_player = { is_rival_of = prev } } }
-		error_log = "VOTC|R|[votc_c.GetTag]|rival|yes"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|rival|yes"
 	}
 	if = {
 		limit = { is_subject_of = scope:votc_player }
-		error_log = "VOTC|R|[votc_c.GetTag]|subject|yes"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|subject|yes"
 	}
 	if = {
 		limit = { scope:votc_player = { is_subject_of = prev } }
-		error_log = "VOTC|R|[votc_c.GetTag]|overlord|yes"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|overlord|yes"
 	}
 	if = {
 		limit = { has_truce_with = scope:votc_player }
-		error_log = "VOTC|R|[votc_c.GetTag]|truce|yes"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|truce|yes"
 	}
 	# opinion of the player, in steps
 	if = {
 		limit = { opinion = { target = scope:votc_player value >= 100 } }
-		error_log = "VOTC|R|[votc_c.GetTag]|opinion|80"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|opinion|80"
 	}
 	else_if = {
 		limit = { opinion = { target = scope:votc_player value >= 30 } }
-		error_log = "VOTC|R|[votc_c.GetTag]|opinion|40"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|opinion|40"
 	}
 	else_if = {
 		limit = { opinion = { target = scope:votc_player value >= 0 } }
-		error_log = "VOTC|R|[votc_c.GetTag]|opinion|10"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|opinion|10"
 	}
 	else_if = {
 		limit = { opinion = { target = scope:votc_player value >= -30 } }
-		error_log = "VOTC|R|[votc_c.GetTag]|opinion|-15"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|opinion|-15"
 	}
 	else_if = {
 		limit = { opinion = { target = scope:votc_player value >= -100 } }
-		error_log = "VOTC|R|[votc_c.GetTag]|opinion|-50"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|opinion|-50"
 	}
 	else = {
-		error_log = "VOTC|R|[votc_c.GetTag]|opinion|-80"
+		error_log = "VOTC|R|[GetGlobalVariable('votc_c').GetCountry.GetTag]|opinion|-80"
 	}
 }
 
@@ -142,12 +155,15 @@ votc_talk_to_character = {
 	set_global_variable = { name = votc_talker value = this }
 	if = {
 		limit = { exists = owner }
-		owner = { save_scope_as = votc_talker_country }
+		owner = {
+			save_scope_as = votc_talker_country
+			set_global_variable = { name = votc_talker_country value = this }
+		}
 	}
 	scope:actor = { votc_snapshot_open = { REASON = talk } }
 	error_log = "VOTC|META|talk|character"
-	error_log = "VOTC|META|talk_tag|[votc_talker_country.GetTag]"
-	error_log = "VOTC|META|talk_name|[votc_talker.GetNameWithNoTooltip]"
+	error_log = "VOTC|META|talk_tag|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]"
+	error_log = "VOTC|META|talk_name|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]"
 	votc_log_character = yes
 	# the character's country, when the monthly list does not have it
 	if = {
@@ -167,26 +183,26 @@ votc_talk_to_character = {
 
 # THIS = scope:votc_talker, its country saved as scope:votc_talker_country
 votc_log_character = {
-	error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|title|[votc_talker.GetRoleName]"
-	error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|age|[votc_talker.GetAgeInYears]"
-	error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|culture|[votc_talker.GetCulture.GetNameWithNoTooltip]"
-	error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|religion|[votc_talker.GetReligion.GetNameWithNoTooltip]"
-	error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|nickname|[votc_talker.GetNickname]"
-	error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|location|[votc_talker.GetLocation.GetNameWithNoTooltip]"
+	error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|title|[GetGlobalVariable('votc_talker').GetCharacter.GetRoleName]"
+	error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|age|[GetGlobalVariable('votc_talker').GetCharacter.GetAgeInYears]"
+	error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|culture|[GetGlobalVariable('votc_talker').GetCharacter.GetCulture.GetNameWithNoTooltip]"
+	error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|religion|[GetGlobalVariable('votc_talker').GetCharacter.GetReligion.GetNameWithNoTooltip]"
+	error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|nickname|[GetGlobalVariable('votc_talker').GetCharacter.GetNickname]"
+	error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|location|[GetGlobalVariable('votc_talker').GetCharacter.GetLocation.GetNameWithNoTooltip]"
 	if = {
 		limit = { is_female = yes }
-		error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|gender|female"
+		error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|gender|female"
 	}
 	else = {
-		error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|gender|male"
+		error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|gender|male"
 	}
 	if = {
 		limit = { is_ruler = yes }
-		error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|ruler|yes"
+		error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|ruler|yes"
 	}
 	if = {
 		limit = { is_heir = yes }
-		error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|status|heir"
+		error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|status|heir"
 	}
 	votc_log_character_abilities = yes
 	votc_log_character_traits = yes
@@ -198,19 +214,23 @@ votc_log_character_family = {
 	scope:votc_talker = {
 		father ?= {
 			save_scope_as = votc_rel
-			error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|father|[votc_rel.GetNameWithNoTooltip]"
+			set_global_variable = { name = votc_rel value = this }
+			error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|father|[GetGlobalVariable('votc_rel').GetCharacter.GetNameWithNoTooltip]"
 		}
 		mother ?= {
 			save_scope_as = votc_rel
-			error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|mother|[votc_rel.GetNameWithNoTooltip]"
+			set_global_variable = { name = votc_rel value = this }
+			error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|mother|[GetGlobalVariable('votc_rel').GetCharacter.GetNameWithNoTooltip]"
 		}
 		every_spouse = {
 			save_scope_as = votc_rel
-			error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|spouse|[votc_rel.GetNameWithNoTooltip]"
+			set_global_variable = { name = votc_rel value = this }
+			error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|spouse|[GetGlobalVariable('votc_rel').GetCharacter.GetNameWithNoTooltip]"
 		}
 		every_child = {
 			save_scope_as = votc_rel
-			error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|children|[votc_rel.GetNameWithNoTooltip]"
+			set_global_variable = { name = votc_rel value = this }
+			error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|children|[GetGlobalVariable('votc_rel').GetCharacter.GetNameWithNoTooltip]"
 		}
 	}
 }
@@ -225,21 +245,21 @@ votc_log_character_abilities = {
 votc_log_ability = {
 	if = {
 		limit = { $A$ >= 80 }
-		error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|$A$_ability|80+ (excellent)"
+		error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|$A$_ability|80+ (excellent)"
 	}
 	else_if = {
 		limit = { $A$ >= 60 }
-		error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|$A$_ability|60-79 (good)"
+		error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|$A$_ability|60-79 (good)"
 	}
 	else_if = {
 		limit = { $A$ >= 40 }
-		error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|$A$_ability|40-59 (average)"
+		error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|$A$_ability|40-59 (average)"
 	}
 	else_if = {
 		limit = { $A$ >= 20 }
-		error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|$A$_ability|20-39 (poor)"
+		error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|$A$_ability|20-39 (poor)"
 	}
 	else = {
-		error_log = "VOTC|CH|[votc_talker_country.GetTag]|[votc_talker.GetNameWithNoTooltip]|$A$_ability|under 20 (terrible)"
+		error_log = "VOTC|CH|[GetGlobalVariable('votc_talker_country').GetCountry.GetTag]|[GetGlobalVariable('votc_talker').GetCharacter.GetNameWithNoTooltip]|$A$_ability|under 20 (terrible)"
 	}
 }
