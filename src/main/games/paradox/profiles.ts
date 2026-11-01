@@ -36,15 +36,15 @@ export interface PdxProfile {
   publicFacts: string[];
   /**
    * How queued actions reach the game without the player typing anything:
-   * 'gui'  - the mod's hidden GUI timer runs the command file itself (ExecuteConsoleCommand),
-   *          the app types into the console only if the game has not answered in time
+   * 'gui'  - the mod's hidden GUI timer applies the queued actions itself (a scripted GUI
+   *          that fires the mod's command event)
    * 'keys' - the app types the run command into the game console when the game is in front
    * 'tuner' - the app sends each command over FireTuner itself (Civilization VI)
    */
   autoRun: 'gui' | 'keys' | 'tuner';
   /**
-   * false: never type the run command into the console (Victoria 3: a console event while
-   * the game runs crashes it; the mod applies the actions itself)
+   * false: never type the run command into the console (Victoria 3/EU5: a console command
+   * can crash the game; the mod applies the actions itself)
    */
   consoleTyping?: boolean;
   /** where the player starts a conversation inside the game */
@@ -135,8 +135,11 @@ export const PDX_PROFILES: Record<PdxGame, PdxProfile> = {
     // debug_log lines land in debug.log (with -debug_mode, which the console needs anyway)
     logFiles: ['logs/debug.log'],
     modFolder: 'votc_eu5',
-    runFiles: { user: [path.join('run', RUN_FILE)], install: [path.join('game', 'run', RUN_FILE)] },
-    runCommand: `run ${RUN_FILE}`,
+    // like Victoria 3: no console (it can crash the game); the actions are a hidden event of
+    // the mod, reloaded by the -debug_mode file watcher and fired by the mod's runner
+    runFiles: { user: [path.join('mod', 'votc_eu5', 'in_game', 'events', 'votc_commands.txt')] },
+    runCommand: 'event votc_cmd.1',
+    consoleTyping: false,
     needsDebugMode: true,
     setting: 'the early modern world, in a Europa Universalis V campaign',
     countryWord: { en: 'country', zh: '国家' },

@@ -7,7 +7,7 @@ import { findSteamGame, paradoxUserDir, exists, testWritable } from '../steam';
 import type {
   FolderDetection, GameAdapter, GameSetupWarning, LoadOptions, LoadResult, TalkTarget, WindowInfo,
 } from '../types';
-import { buildRunFile, compileCommand, extraRunFiles, PdxCommand, QueuedCommand } from './commands';
+import { buildRunFile, compileCommand, PdxCommand, QueuedCommand, runFileEncoding } from './commands';
 import { buildGameDataFromPdx, personTargetId, talkTargets } from './buildGameData';
 import type { PdxProfile } from './profiles';
 import { personKey, SnapshotParser } from './snapshot';
@@ -33,44 +33,96 @@ const FOCUS_SETTLE_MS = 1200;
 const TYPE_RETRY_MS = 10000;
 const MAX_TYPE_ATTEMPTS = 3;
 
-/** Follows one log file: reads appended bytes, restarts when the game recreates the file. */
-class LogFollower {
+/** Older copies the game keeps when a log fills up: debug.log -> debug.1.log, debug.2.log... */
+const MAX_ROTATED_LOGS = 9;
+
+/**
+ * Follows one log file: reads appended bytes. The game starts a new log when one fills up
+ * (Victoria 3 keeps debug.1.log ... debug.5.log of 512 KB; with mods that report many errors
+ * that happens several times a second). The file's identity tells a new log from the old one;
+ * the rest of the old log is read from its rotated copy first, so no line is lost.
+ */
+export class LogFollower {
   private offset = 0;
   private remainder = '';
   private started = false;
+  private id: bigint | null = null;
 
   constructor(private file: string, private onLine: (line: string) => void) {}
 
+  private rotated(n: number): string {
+    const ext = path.extname(this.file);
+    return path.join(path.dirname(this.file), `${path.basename(this.file, ext)}.${n}${ext}`);
+  }
+
   poll(): void {
-    let size: number;
+    let stat: fs.BigIntStats;
     try {
-      size = fs.statSync(this.file).size;
+      stat = fs.statSync(this.file, { bigint: true });
     } catch {
       return;
     }
+    const size = Number(stat.size);
     if (!this.started) {
       this.started = true;
+      this.id = stat.ino;
       this.offset = Math.max(0, size - INITIAL_READ_BYTES);
     }
-    if (size < this.offset) {
-      // the game started a new log
+    if (this.id !== null && stat.ino !== BigInt(0) && stat.ino !== this.id) {
+      this.catchUpRotated(this.id);
+      this.id = stat.ino;
+      this.offset = 0;
+    } else if (size < this.offset) {
+      // the game started a new log (and the file system reports no identity)
       this.offset = 0;
       this.remainder = '';
     }
-    if (size === this.offset) return;
+    this.readFrom(this.file, size);
+  }
+
+  /** The log was replaced: finish the old one (now debug.N.log), then the newer copies. */
+  private catchUpRotated(oldId: bigint): void {
+    let found = 0;
+    for (let n = 1; n <= MAX_ROTATED_LOGS && !found; n++) {
+      try {
+        if (fs.statSync(this.rotated(n), { bigint: true }).ino === oldId) found = n;
+      } catch {
+        break;
+      }
+    }
+    if (!found) {
+      // the old log is gone: start over with the new one
+      this.remainder = '';
+      return;
+    }
+    for (let n = found; n >= 1; n--) {
+      const file = this.rotated(n);
+      let size: number;
+      try {
+        size = fs.statSync(file).size;
+      } catch {
+        continue;
+      }
+      this.readFrom(file, size);
+      this.offset = 0;
+    }
+  }
+
+  private readFrom(file: string, size: number): void {
+    if (size <= this.offset) return;
     let fd: number | null = null;
     try {
-      fd = fs.openSync(this.file, 'r');
+      fd = fs.openSync(file, 'r');
       const length = size - this.offset;
       const buf = Buffer.alloc(length);
-      fs.readSync(fd, buf, 0, length, this.offset);
-      this.offset = size;
-      const text = this.remainder + buf.toString('utf-8');
+      const read = fs.readSync(fd, buf, 0, length, this.offset);
+      this.offset += read;
+      const text = this.remainder + buf.subarray(0, read).toString('utf-8');
       const lines = text.split('\n');
       this.remainder = lines.pop() ?? '';
       for (const line of lines) this.onLine(line);
     } catch (error) {
-      console.warn(`ParadoxAdapter: could not read ${this.file}:`, error);
+      console.warn(`ParadoxAdapter: could not read ${file}:`, error);
     } finally {
       if (fd !== null) fs.closeSync(fd);
     }
@@ -83,7 +135,8 @@ class LogFollower {
  * Game -> app: the VOTC mod logs a snapshot of the player's country and the countries that
  * matter to it (monthly, on load, and when asked), see paradox/types.ts.
  * App -> game: whitelisted commands compiled to script (paradox/commands.ts) and written to
- * votc.txt. Victoria 3 and EU5 run it from the mod's hidden GUI timer; for HOI4 and Stellaris
+ * votc.txt. Victoria 3 and EU5 get them as the mod's hidden command event instead, which the
+ * mod's GUI timer fires through a scripted GUI (no console); for HOI4 and Stellaris
  * the app types `run votc.txt` into the console once the game is in front. The game
  * acknowledges every command, so the file can run any number of times.
  *
@@ -425,17 +478,15 @@ export class ParadoxAdapter extends EventEmitter implements GameAdapter {
   }
 
   private writeRunFiles(): void {
-    const content = buildRunFile(this.profile.id, this.pending);
-    const files: Array<[string, string]> = this.runFilePaths().map((f) => [f, content]);
-    // Victoria 3: the trigger the mod's runner checks before applying anything
+    const content = (runFileEncoding(this.profile.id).bom ? '\uFEFF' : '') + buildRunFile(this.profile.id, this.pending);
     const dir = this.userDir();
-    if (dir) for (const [rel, text] of Object.entries(extraRunFiles(this.profile.id, this.pending))) files.push([path.join(dir, rel), text]);
-    for (const [file, text] of files) {
+    for (const file of this.runFilePaths()) {
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        // write and rename, so the game (or its file watcher) never reads half a file
-        const tmp = `${file}.tmp`;
-        fs.writeFileSync(tmp, text, 'utf-8');
+        // write and rename, so the game (or its file watcher) never reads half a file; the
+        // temporary file stays outside the mod folder, which the file watcher watches
+        const tmp = dir && file.startsWith(dir) ? path.join(dir, `.votc_${path.basename(file)}.tmp`) : `${file}.tmp`;
+        fs.writeFileSync(tmp, content, 'utf-8');
         fs.renameSync(tmp, file);
       } catch (error) {
         // the install folder may be read-only; the user folder copy is enough

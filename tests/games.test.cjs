@@ -172,34 +172,76 @@ function parse(lines) {
     const vic3 = buildRunFile('vic3', [{ seq: 7, op: 'opinion', compiled: compileCommand('vic3', { op: 'opinion', a: 'GBR', b: 'FRA', amount: 10 }) }]);
     check(vic3.includes('global_var:votc_seq < 7') && vic3.includes('debug_log = "VOTC|ACK|7"') && !vic3.includes('eval_effect'), 'vic3: script file with debug_log');
     // Victoria 3 has no `run` command: a hidden event of the mod, reloaded and fired by the mod's timer
-    check(/^namespace = votc_cmd$/m.test(vic3) && /votc_cmd\.1 = \{\n\ttype = country_event\n\thidden = yes\n\torphan = yes\n\timmediate = \{/.test(vic3), 'vic3: commands are a hidden event');
+    check(/^namespace = votc_cmd$/m.test(vic3) && /votc_cmd\.1 = \{\n\ttype = country_event\n\thidden = yes\n\torphan = yes\n\ttrigger = \{\n\t\tOR = \{ NOT = \{ has_global_variable = votc_seq \} global_var:votc_seq < 7 \}\n\t\}\n\timmediate = \{/.test(vic3), 'vic3: commands are a hidden event that fires only while something has not run');
     const vic3Empty = buildRunFile('vic3', []);
-    check(/votc_cmd\.1 = \{/.test(vic3Empty) && !vic3Empty.includes('VOTC|ACK'), 'vic3: the event exists even with nothing queued');
+    check(/votc_cmd\.1 = \{/.test(vic3Empty) && /trigger = \{\n\t\talways = no\n\t\}/.test(vic3Empty) && !vic3Empty.includes('VOTC|ACK'), 'vic3: the event exists even with nothing queued, and never fires then');
     check(PDX_PROFILES.vic3.runCommand === 'event votc_cmd.1' && PDX_PROFILES.vic3.runFiles.user[0].replace(/\\/g, '/') === 'mod/votc_vic3/events/votc_commands.txt', 'vic3: the event file lives in the mod');
     const runner = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'gui', 'votc_runner.gui'), 'utf-8');
     // a console event crashes Victoria 3 whenever another game thread holds the random
     // generator ("Random is blocked by thread"), paused or not: no console at all. The runner
-    // executes a scripted GUI (run in the game thread like a click) while something is pending.
+    // executes a scripted GUI (run in the game thread like a click).
     check(!runner.includes('ExecuteConsoleCommand'), 'vic3: the runner uses no console command');
-    check(runner.includes("GetScriptedGui('votc_apply_sgui').Execute(GuiScope.SetRoot(GetPlayer.MakeScope).End)")
-      && /visible = "\[And\(GetPlayer\.IsValid, GetScriptedGui\('votc_apply_sgui'\)\.IsValid\(GuiScope\.SetRoot\(GetPlayer\.MakeScope\)\.End\)\)\]"/.test(runner), 'vic3: the runner executes the scripted GUI, only while something is pending');
+    check(runner.includes("GetScriptedGui('votc_apply_sgui').Execute(GuiScope.SetRoot(GetPlayer.MakeScope).End)") && runner.includes('visible = "[GetPlayer.IsValid]"'), 'vic3: the runner executes the scripted GUI');
     const sgui = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'scripted_guis', 'votc_sguis.txt'), 'utf-8');
-    check(/votc_apply_sgui = \{[\s\S]*scope = country[\s\S]*votc_has_pending = yes[\s\S]*trigger_event = \{ id = votc_cmd\.1 \}/.test(sgui), 'vic3: the scripted GUI fires the command event when something is pending');
-    const { extraRunFiles } = load('games/paradox/commands.js');
-    const pendingEmpty = extraRunFiles('vic3', [])['mod/votc_vic3/common/scripted_triggers/votc_pending_triggers.txt'];
-    const pendingOne = extraRunFiles('vic3', [{ seq: 41, op: 'opinion', compiled: { effect: 'x' } }, { seq: 42, op: 'money', compiled: { effect: 'y' } }])['mod/votc_vic3/common/scripted_triggers/votc_pending_triggers.txt'];
-    check(/votc_has_pending = \{\n\talways = no\n\}/.test(pendingEmpty) && /global_var:votc_seq < 42/.test(pendingOne) && !Object.keys(extraRunFiles('hoi4', [])).length, 'vic3: the pending trigger follows the queue');
-    check(fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'scripted_triggers', 'votc_pending_triggers.txt'), 'utf-8').replace(/^﻿/, '').replace(/\r/g, '') === pendingEmpty, 'vic3: the shipped trigger file equals an empty queue');
+    check(/votc_apply_sgui = \{[\s\S]*scope = country[\s\S]*is_player = yes[\s\S]*trigger_event = \{ id = votc_cmd\.1 \}/.test(sgui), 'vic3: the scripted GUI fires the command event');
+    // rewriting a scripted trigger made the file watcher reload all of them: "Pure Virtual
+    // Function Call". The app rewrites only the event file, and nothing refers to a trigger file.
+    for (const mod of [['votc_vic3'], ['votc_eu5', 'in_game']]) {
+      const trig = path.join(REPO, 'paradox_mods', ...mod, 'common', 'scripted_triggers');
+      check(!fs.existsSync(path.join(trig, 'votc_pending_triggers.txt')) && !fs.readdirSync(trig).some((f) => fs.readFileSync(path.join(trig, f), 'utf-8').includes('votc_has_pending')), `${mod[0]}: no app-written scripted trigger`);
+    }
+    check(!fs.readFileSync(path.join(REPO, 'src', 'main', 'games', 'paradox', 'ParadoxAdapter.ts'), 'utf-8').includes('extraRunFiles'), 'the app writes the run file only');
     const onActions = fs.readdirSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'on_actions')).map((f) => fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'common', 'on_actions', f), 'utf-8')).join('\n');
     check(/trigger_event = \{ id = votc_cmd\.1 \}/.test(onActions), 'vic3: the monthly pulse applies the actions in the game thread');
-    check(PDX_PROFILES.vic3.consoleTyping === false && PDX_PROFILES.eu5.consoleTyping !== false, 'vic3: the app never types into the console');
-    check(fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'events', 'votc_commands.txt'), 'utf-8').replace(/\r/g, '') === vic3Empty.replace('\n\n', '\n\n'), 'vic3: the shipped event file equals an empty queue');
+    check(PDX_PROFILES.vic3.consoleTyping === false && PDX_PROFILES.eu5.consoleTyping === false && PDX_PROFILES.hoi4.consoleTyping !== false, 'vic3/eu5: the app never types into the console');
+    const { runFileEncoding } = load('games/paradox/commands.js');
+    check(runFileEncoding('vic3').bom && runFileEncoding('eu5').bom && !runFileEncoding('hoi4').bom, 'vic3/eu5: the event file is written with a byte order mark');
+    const vic3Shipped = fs.readFileSync(path.join(REPO, 'paradox_mods', 'votc_vic3', 'events', 'votc_commands.txt'), 'utf-8').replace(/\r/g, '');
+    check(vic3Shipped === '\uFEFF' + vic3Empty, 'vic3: the shipped event file equals an empty queue');
     check(buildRunFile('stellaris', [{ seq: 3, op: 'refresh', compiled: compileCommand('stellaris', { op: 'refresh' }) }]).startsWith('effect if = {'), 'stellaris: console effect lines');
-    check(buildRunFile('eu5', []) === '', 'empty queue writes an empty file');
+    check(buildRunFile('hoi4', []) === '', 'empty queue writes an empty file');
+    // EU5 (same engine as Victoria 3): the same scripted GUI runner, no console
+    {
+      const EU5 = path.join(REPO, 'paradox_mods', 'votc_eu5', 'in_game');
+      const read = (...p) => fs.readFileSync(path.join(EU5, ...p), 'utf-8').replace(/\r/g, '');
+      const eu5Runner = read('gui', 'votc_runner.gui');
+      check(!eu5Runner.includes('ExecuteConsoleCommand') && eu5Runner.includes("GetScriptedGui('votc_apply_sgui').Execute(GuiScope.SetRoot(GetPlayer.MakeScope).End)")
+        && eu5Runner.includes('visible = "[GetPlayer.IsValid]"'), 'eu5: the runner executes the scripted GUI, no console');
+      check(/votc_apply_sgui = \{[\s\S]*scope = country[\s\S]*is_ai = no[\s\S]*trigger_event_silently = \{ id = votc_cmd\.1 \}/.test(read('common', 'scripted_guis', 'votc_sguis.txt')), 'eu5: the scripted GUI fires the command event');
+      check(/trigger_event_silently = \{ id = votc_cmd\.1 \}/.test(read('common', 'on_action', 'votc_on_actions.txt')), 'eu5: the monthly pulse fires the command event');
+      const eu5Empty = buildRunFile('eu5', []);
+      check(read('events', 'votc_commands.txt') === '\uFEFF' + eu5Empty && /outcome = neutral[\s\S]*hidden = yes[\s\S]*always = no[\s\S]*immediate = \{\n\t\}/.test(eu5Empty), 'eu5: the shipped event file equals an empty queue');
+      const eu5One = buildRunFile('eu5', [{ seq: 7, op: 'money', compiled: compileCommand('eu5', { op: 'money', from: 'CAS', to: 'ARA', amount: 50 }) }]);
+      check(/trigger = \{\n\t\tOR = \{ NOT = \{ has_global_variable = votc_seq \} global_var:votc_seq < 7 \}/.test(eu5One) && eu5One.includes('add_gold = 50') && eu5One.includes('debug_log = "VOTC|ACK|7"'), 'eu5: queued commands go into the event');
+      check(PDX_PROFILES.eu5.runFiles.user.join() === path.join('mod', 'votc_eu5', 'in_game', 'events', 'votc_commands.txt') && !PDX_PROFILES.eu5.runFiles.install, 'eu5: the app writes the mod event');
+    }
     // braces must balance or the game rejects the whole line
     for (const text of [hoi4, vic3]) {
       check((text.match(/\{/g) || []).length === (text.match(/\}/g) || []).length, 'braces balanced');
     }
+  });
+
+  await section('log rotation (Victoria 3 debug.log fills up several times a second with mods)', () => {
+    const { LogFollower } = load('games/paradox/ParadoxAdapter.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'votc_rot_'));
+    const log = path.join(dir, 'debug.log');
+    const got = [];
+    const f = new LogFollower(log, (l) => got.push(l));
+    fs.writeFileSync(log, 'a1\n');
+    f.poll();
+    // the rest of a snapshot lands in the old log, then it is renamed twice before the next poll
+    fs.appendFileSync(log, 'VOTC|BEGIN|vic3|2talk\nVOTC|C|GBR\n');
+    fs.renameSync(log, path.join(dir, 'debug.1.log'));
+    fs.writeFileSync(log, 'VOTC|P|x\n' + 'y'.repeat(200) + '\n');
+    fs.renameSync(path.join(dir, 'debug.1.log'), path.join(dir, 'debug.2.log'));
+    fs.renameSync(log, path.join(dir, 'debug.1.log'));
+    fs.writeFileSync(log, 'VOTC|END\n');
+    f.poll();
+    check(got.join('|') === ['a1', 'VOTC|BEGIN|vic3|2talk', 'VOTC|C|GBR', 'VOTC|P|x', 'y'.repeat(200), 'VOTC|END'].join('|'), 'no line is lost when the log rotates between polls');
+    fs.appendFileSync(log, 'z\n');
+    f.poll();
+    check(got[got.length - 1] === 'z' && got.length === 7, 'keeps following the new log');
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   await section('adapter end to end (HOI4 with a fake game log)', async () => {

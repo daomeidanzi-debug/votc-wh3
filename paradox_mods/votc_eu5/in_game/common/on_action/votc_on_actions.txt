@@ -14,5 +14,7 @@ votc_on_monthly_country = {
 	}
 	effect = {
 		votc_snapshot = { REASON = monthly }
+		# fallback for the runner (gui/votc_runner.gui): apply queued actions
+		trigger_event_silently = { id = votc_cmd.1 }
 	}
 }

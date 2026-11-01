@@ -566,24 +566,42 @@ function markDone(game: PdxGame, seq: number): string {
 }
 
 /**
- * Victoria 3 has no `run` console command. The commands go into a hidden event of the mod
- * (events/votc_commands.txt); the -debug_mode file watcher reloads it when it changes, and
- * the mod's GUI timer fires it with `event votc_cmd.1`. The event always exists, so firing
- * it with nothing queued does nothing.
+ * Victoria 3 and EU5 never use the console: a console command from the GUI races the game's
+ * threads for the random generator ("Random is blocked by thread"), which crashes Victoria 3.
+ * The commands go into a hidden event of the mod (events/votc_commands.txt); the -debug_mode
+ * file watcher reloads it when it changes, and the mod's runner fires it through a scripted
+ * GUI every 2 seconds. The event's own trigger is false once the newest command has run, so
+ * firing it then does nothing. Nothing else is rewritten while the game runs: reloading
+ * scripted triggers makes the file watcher reload all of them, which crashed Victoria 3
+ * ("Pure Virtual Function Call").
  */
 export const VIC3_EVENT = 'votc_cmd.1';
 
-function vic3EventFile(queue: QueuedCommand[]): string {
-  const body = queue.map((q) => `\t\t${guardedScript('vic3', q)}`);
-  if (queue.length) body.push(`\t\t${logEffect('vic3', `VOTC|ACK|${Math.max(...queue.map((q) => q.seq))}`)}`);
+type EventGame = 'vic3' | 'eu5';
+
+function isEventGame(game: PdxGame): game is EventGame {
+  return game === 'vic3' || game === 'eu5';
+}
+
+function eventFile(game: EventGame, queue: QueuedCommand[]): string {
+  const body = queue.map((q) => `\t\t${guardedScript(game, q)}`);
+  const last = queue.length ? Math.max(...queue.map((q) => q.seq)) : 0;
+  if (queue.length) body.push(`\t\t${logEffect(game, `VOTC|ACK|${last}`)}`);
+  const trigger = queue.length ? [`\t\t${notDoneTrigger(game, last)}`] : ['\t\talways = no'];
+  // EU5 events, hidden ones too, carry an outcome, title and desc (see the game's own)
+  const eu5Fields = game === 'eu5' ? ['\toutcome = neutral', '\ttitle = empty_text', '\tdesc = empty_text'] : [];
   return [
     '# Written by the VOTC app: the actions agreed in conversations. Do not edit.',
     'namespace = votc_cmd',
     '',
     `${VIC3_EVENT} = {`,
     '\ttype = country_event',
+    ...eu5Fields,
     '\thidden = yes',
     '\torphan = yes',
+    '\ttrigger = {',
+    ...trigger,
+    '\t}',
     '\timmediate = {',
     ...body,
     '\t}',
@@ -592,25 +610,9 @@ function vic3EventFile(queue: QueuedCommand[]): string {
   ].join('\n');
 }
 
-/** Victoria 3: the mod's runner applies commands only while this trigger is true. */
-export const VIC3_PENDING_FILE = 'mod/votc_vic3/common/scripted_triggers/votc_pending_triggers.txt';
-
-/**
- * Files besides the run file, relative to the user folder. Victoria 3: votc_has_pending is
- * true until the newest queued command has run (the event stores its sequence number), so
- * the runner stops once everything is applied.
- */
-export function extraRunFiles(game: PdxGame, queue: QueuedCommand[]): Record<string, string> {
-  if (game !== 'vic3') return {};
-  const lines = ['# Written by the VOTC app: yes while some queued action has not run. Do not edit.', 'votc_has_pending = {'];
-  if (!queue.length) {
-    lines.push('\talways = no');
-  } else {
-    const last = Math.max(...queue.map((q) => q.seq));
-    lines.push('\tOR = {', '\t\tNOT = { has_global_variable = votc_seq }', `\t\tglobal_var:votc_seq < ${last}`, '\t}');
-  }
-  lines.push('}', '');
-  return { [VIC3_PENDING_FILE]: lines.join('\n') };
+/** Victoria 3/EU5 read script files as UTF-8 with a byte order mark. */
+export function runFileEncoding(game: PdxGame): { bom: boolean } {
+  return { bom: isEventGame(game) };
 }
 
 /** One guarded command, as a single line of script. */
@@ -623,10 +625,10 @@ export function guardedScript(game: PdxGame, q: QueuedCommand): string {
 
 /**
  * The file the player runs (HOI4/Stellaris: a list of console commands for `run`;
- * Victoria 3/EU5: a script file for `run`).
+ * Victoria 3/EU5: the mod's hidden command event).
  */
 export function buildRunFile(game: PdxGame, queue: QueuedCommand[]): string {
-  if (game === 'vic3') return vic3EventFile(queue);
+  if (isEventGame(game)) return eventFile(game, queue);
   if (queue.length === 0) return '';
   const last = Math.max(...queue.map((q) => q.seq));
   const statements = queue.map((q) => guardedScript(game, q));

@@ -1,19 +1,19 @@
 ﻿# VOTC Bridge (GPL-3.0, see LICENSE.txt): applies the actions the VOTC app queued.
-# An invisible widget, shown only while some queued action has not run yet. Every 2 seconds
-# it executes the scripted GUI votc_apply_sgui (common/scripted_guis/votc_sguis.txt), which
-# the game runs in its own thread like a player's click, paused or not; it fires the hidden
-# event votc_cmd.1 (events/votc_commands.txt, rewritten by the app and reloaded by the
-# -debug_mode file watcher). Its commands are guarded by sequence numbers, so running them
-# again changes nothing. No console command is used: a console `event` races the game's
-# threads for the random generator and crashes Victoria 3. The monthly pulse
-# (common/on_actions/votc_on_actions.txt) fires the same event as a fallback.
+# An invisible widget, shown while a game is loaded. Every 2 seconds it executes the
+# scripted GUI votc_apply_sgui (common/scripted_guis/votc_sguis.txt), which the game runs in
+# its own thread like a player's click, paused or not; it fires the hidden event votc_cmd.1
+# (events/votc_commands.txt, rewritten by the app and reloaded by the -debug_mode file
+# watcher). The event's trigger is false once everything has run, and its commands are
+# guarded by sequence numbers, so running it again changes nothing. No console command is
+# used: one from the GUI races the game's threads for the random generator (it crashes Victoria 3).
+# The monthly pulse (common/on_actions/votc_on_actions.txt) fires the same event as a fallback.
 window = {
 	name = "votc_runner"
 	size = { 1 1 }
 	position = { -10 -10 }
 	movable = no
 	alwaystransparent = yes
-	visible = "[And(GetPlayer.IsValid, GetScriptedGui('votc_apply_sgui').IsValid(GuiScope.SetRoot(GetPlayer.MakeScope).End))]"
+	visible = "[GetPlayer.IsValid]"
 
 	state = {
 		name = _show

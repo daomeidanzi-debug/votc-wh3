@@ -1,0 +1,19 @@
+﻿# VOTC Bridge (GPL-3.0, see LICENSE.txt): applies the actions the VOTC app queued.
+# The runner (gui/votc_runner.gui) executes this scripted GUI every 2 seconds; like a player's
+# click it is sent to the game and its effect runs in the game's own thread, paused or not.
+# It fires the hidden event votc_cmd.1 (events/votc_commands.txt), whose own trigger is false
+# once every queued command has run. No console command is used (one from the GUI races the
+# game's threads and crashes Victoria 3 on the same engine), and the app rewrites no scripted trigger
+# (the file watcher would reload all of them, which also crashes the game).
+
+votc_apply_sgui = {
+	scope = country
+
+	is_valid = {
+		is_ai = no
+	}
+
+	effect = {
+		trigger_event_silently = { id = votc_cmd.1 }
+	}
+}

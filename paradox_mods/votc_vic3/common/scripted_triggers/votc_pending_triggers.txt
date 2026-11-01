@@ -1,4 +1,0 @@
-﻿# Written by the VOTC app: yes while some queued action has not run. Do not edit.
-votc_has_pending = {
-	always = no
-}

@@ -1207,13 +1207,10 @@ function startConversation(targetId?: string): void {
     }
     window.showInactive();
   }
-  window.webContents.send('chat-reset'); // This will trigger showChat in App.tsx
-  const focusChat = () => {
-    if (!window.isDestroyed()) {
-      window.show();
-      window.focus();
-    }
-  };
+  // This will trigger showChat in App.tsx; a window that is still loading would drop it
+  if (window.webContents.isLoading()) window.webContents.once('did-finish-load', () => window.webContents.send('chat-reset'));
+  else window.webContents.send('chat-reset');
+  const focusChat = () => bringToFront(window);
   if (conversation && activeGame().family === 'totalwar') {
     conversation.ready.then(focusChat, focusChat);
   } else {
@@ -1228,9 +1225,28 @@ function showTalkPicker(tag?: string): void {
   if (!chatWindow || chatWindow.isDestroyed()) {
     chatWindow = createWindow();
   }
-  chatWindow.show();
-  chatWindow.focus();
-  chatWindow.webContents.send('talk-pick', game.listTalkTargets(tag || undefined));
+  const window = chatWindow;
+  const targets = game.listTalkTargets(tag || undefined);
+  bringToFront(window);
+  // a window that is still loading would drop the message
+  if (window.webContents.isLoading()) window.webContents.once('did-finish-load', () => window.webContents.send('talk-pick', targets));
+  else window.webContents.send('talk-pick', targets);
+}
+
+/** Show the chat window over the game, even when it was minimized or the game is in front. */
+function bringToFront(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  // Windows keeps another app's window from taking focus; being on top for a moment gets past it
+  if (!window.isAlwaysOnTop()) {
+    window.setAlwaysOnTop(true);
+    window.focus();
+    window.setAlwaysOnTop(false);
+  } else {
+    window.focus();
+  }
+  window.moveTop();
 }
 
 /** The talk hotkey: Paradox games open a partner picker, the others ask the game. */
