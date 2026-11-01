@@ -1,5 +1,5 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
-// Warhammer III: military alliance between the AI character's faction and the player's faction.
+// Total War (Warhammer III, Three Kingdoms): military alliance between the AI character's faction and the player's faction.
 
 const ctx = (gameData, npc) => {
   const player = gameData.characters.get(gameData.playerID);
@@ -10,6 +10,7 @@ const ctx = (gameData, npc) => {
 
 module.exports = {
   signature: "formsAllianceWithPlayer",
+  games: ["wh3", "tk"],
   title: {
     en: "Forms a Military Alliance",
     zh: "结成军事同盟"

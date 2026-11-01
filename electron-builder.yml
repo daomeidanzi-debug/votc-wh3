@@ -1,5 +1,5 @@
 appId: com.votc.wh3
-productName: VOTC-WH3
+productName: VOTC Multi
 copyright: "Copyright (C) MrAndroPC and VOTC contributors; Warhammer III port (C) 2026 daomeidanzi-debug. GPL-3.0"
 directories:
   buildResources: build
@@ -35,6 +35,11 @@ files:
   - 'out/**'  # Include the output directory
   - 'default_userdata/**'  # Include default_userdata directory
   - '!wh3_mod/**'
+  - '!tk_mod/**'
+  - '!attila_mod/**'
+  - '!civ6_mod/**'
+  - '!paradox_mods/**'
+  - '!tests/**'
   # active-win misclassifies node-gyp as a runtime dep, but it only uses
   # prebuilt .node binaries — exclude the ~2MB build toolchain it drags in.
   - '!**/node_modules/node-gyp/**'
@@ -55,7 +60,7 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 
 win:
-  executableName: VOTC-WH3
+  executableName: VOTC-Multi
   icon: build/icon.ico
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
@@ -109,8 +114,27 @@ extraFiles:
     to: LICENSE.txt
   - from: build/NOTICE.txt
     to: NOTICE.txt
+# The game mods ship next to the program (resources\mods): Total War packs go into the game's
+# data folder, Paradox mod folders into Documents\Paradox Interactive\<game>\mod, the
+# Civilization VI mod into AppData\Local\Firaxis Games\Sid Meier's Civilization VI\Mods.
 extraResources:
   - from: wh3_mod/votc_wh3.pack
     to: votc_wh3.pack
+  - from: wh3_mod/votc_wh3.pack
+    to: mods/warhammer3/votc_wh3.pack
+  - from: tk_mod/votc_3k.pack
+    to: mods/three_kingdoms/votc_3k.pack
+  - from: attila_mod/votc_attila.pack
+    to: mods/attila/votc_attila.pack
+  - from: civ6_mod/VOTC_Bridge
+    to: mods/civ6/VOTC_Bridge
+  - from: paradox_mods
+    to: mods/paradox
+    filter:
+      - '**/*'
+      - '!build_stellaris_effects.py'
+      - '!build_trait_logs.py'
+  - from: LICENSE
+    to: mods/paradox/LICENSE.txt
 # electronDownload:
 #   mirror: https://npmmirror.com/mirrors/electron/

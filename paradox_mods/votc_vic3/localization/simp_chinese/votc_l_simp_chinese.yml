@@ -1,0 +1,9 @@
+﻿l_simp_chinese:
+ votc_talk: "交谈（VOTC）"
+ votc_talk_desc: "在 VOTC 程序里与[Character.GetFullName]对话。"
+ votc_talk_country:0 "交谈（VOTC）"
+ votc_talk_country_action_name:0 "交谈（VOTC）"
+ votc_talk_country_action_propose_name:0 "交谈（VOTC）"
+ votc_talk_country_desc:0 "在 VOTC 程序里与这个国家的元首或其他人物对话（程序里会列出该国的人物）。不改变游戏里的任何东西。"
+ votc_talk_country_action_notification_name:0 "一次会谈"
+ votc_talk_country_action_notification_desc:0 "[INITIATOR_COUNTRY.GetName]希望与我们会谈。"

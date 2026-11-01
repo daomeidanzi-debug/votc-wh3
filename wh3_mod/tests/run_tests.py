@@ -1,4 +1,4 @@
-"""Runs every Warhammer III port test.
+"""Runs every Warhammer III port test, plus the Three Kingdoms bridge and multi-game tests.
 
     python wh3_mod/tests/run_tests.py
 
@@ -26,6 +26,8 @@ def main():
         ([sys.executable, 'test_bridge.py', '--fixtures', fixtures], 'bridge export fixtures'),
         (['node', os.path.join('node', 'pipeline.test.cjs'), fixtures, commands], 'main-process pipeline'),
         ([sys.executable, 'test_bridge.py', commands], 'serialized actions through the Lua bridge'),
+        ([sys.executable, os.path.join(REPO, 'tk_mod', 'tests', 'test_bridge_3k.py')], 'Three Kingdoms Lua bridge'),
+        (['node', os.path.join(REPO, 'tests', 'games.test.cjs')], 'multi-game (Paradox bridge, registry, actions)'),
     ]
     failed = []
     for cmd, name in steps:

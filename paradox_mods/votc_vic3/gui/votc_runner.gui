@@ -1,0 +1,34 @@
+﻿# VOTC Bridge (GPL-3.0, see LICENSE.txt): applies the actions the VOTC app queued.
+# An invisible widget whose states loop every 2 seconds and fire the hidden event votc_cmd.1
+# (events/votc_commands.txt). Victoria 3 has no `run` console command: the app rewrites that
+# event file and the -debug_mode file watcher reloads it. Its commands are guarded by
+# sequence numbers, so firing it again changes nothing.
+window = {
+	name = "votc_runner"
+	size = { 1 1 }
+	position = { -10 -10 }
+	movable = no
+	alwaystransparent = yes
+	# only while the game is paused: an event fired from the console while the simulation runs
+	# races the game thread for the random generator and crashes the game ("Random is blocked
+	# by thread"). While time runs, the monthly pulse fires the event (votc_on_actions.txt).
+	visible = "[And(GetPlayer.IsValid, TimeKeeper.IsPaused)]"
+
+	state = {
+		name = _show
+		next = votc_tick_a
+		duration = 2
+	}
+	state = {
+		name = votc_tick_a
+		next = votc_tick_b
+		duration = 2
+		on_finish = "[ExecuteConsoleCommand('event votc_cmd.1')]"
+	}
+	state = {
+		name = votc_tick_b
+		next = votc_tick_a
+		duration = 2
+		on_finish = "[ExecuteConsoleCommand('event votc_cmd.1')]"
+	}
+}

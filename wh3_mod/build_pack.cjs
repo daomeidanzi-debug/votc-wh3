@@ -1,5 +1,6 @@
 /*
  * Builds votc_wh3.pack (PFH5 mod pack, uncompressed) from the files under wh3_mod/script/.
+ * Three Kingdoms packs use the same format: tk_mod/build_pack.cjs calls build() below.
  *
  *   node wh3_mod/build_pack.cjs [output.pack]
  *
@@ -11,27 +12,30 @@
 const fs = require('fs');
 const path = require('path');
 
-const HERE = __dirname;
 const SOURCE_DIRS = ['script'];
 
-function collect() {
+/**
+ * @param {string} modDir folder holding script/
+ * @param {string} licenseRel packed path of the license text
+ */
+function collect(modDir, licenseRel) {
   const files = [];
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
-      else files.push({ rel: path.relative(HERE, full).split(path.sep).join('\\').toLowerCase(), full });
+      else files.push({ rel: path.relative(modDir, full).split(path.sep).join('\\').toLowerCase(), full });
     }
   };
-  for (const d of SOURCE_DIRS) walk(path.join(HERE, d));
+  for (const d of SOURCE_DIRS) walk(path.join(modDir, d));
   // GPL-3.0 §4: every copy of the mod carries the license text. The mod loader only
   // loads .lua files, so the game ignores it.
-  files.push({ rel: 'script\\campaign\\mod\\votc_wh3_license.txt', full: path.join(HERE, '..', 'LICENSE') });
+  files.push({ rel: licenseRel, full: path.join(modDir, '..', 'LICENSE') });
   return files.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
 }
 
-function build(outPath) {
-  const files = collect();
+function build(outPath, modDir = __dirname, licenseRel = 'script\\campaign\\mod\\votc_wh3_license.txt') {
+  const files = collect(modDir, licenseRel);
   const indexParts = [];
   const dataParts = [];
   for (const f of files) {
@@ -56,4 +60,8 @@ function build(outPath) {
   console.log('wrote', outPath, fs.statSync(outPath).size, 'bytes');
 }
 
-build(process.argv[2] || path.join(HERE, 'votc_wh3.pack'));
+module.exports = { build };
+
+if (require.main === module) {
+  build(process.argv[2] || path.join(__dirname, 'votc_wh3.pack'));
+}

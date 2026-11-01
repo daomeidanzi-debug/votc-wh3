@@ -1,0 +1,8 @@
+﻿l_english:
+ votc_opinion_great:0 "Memorable diplomacy"
+ votc_opinion_good:0 "Cordial talks"
+ votc_opinion_bad:0 "Sour talks"
+ votc_opinion_terrible:0 "Diplomatic insult"
+ VOTC_WAR_NAME:0 "War of Words"
+ decision_votc_open_communications:0 "Open Communications (VOTC)"
+ decision_votc_open_communications_desc:0 "Talk with your leaders or the rulers of other empires in the VOTC app."

@@ -1,0 +1,20 @@
+﻿# VOTC Bridge (GPL-3.0, see LICENSE.txt). Lists below are appended to the
+# game's own on_actions; the effects live in our own on_actions so nothing is overwritten.
+
+# Root = Country
+on_monthly_pulse_country = {
+	on_actions = {
+		votc_on_monthly_country
+	}
+}
+
+votc_on_monthly_country = {
+	trigger = {
+		is_player = yes
+	}
+	effect = {
+		votc_snapshot = { REASON = monthly }
+		# the actions the app queued (events/votc_commands.txt), applied in the game's own thread
+		trigger_event = { id = votc_cmd.1 }
+	}
+}

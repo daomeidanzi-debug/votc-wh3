@@ -100,7 +100,8 @@ export class TemplateEngine {
 
   renderTemplateString(content: string, context: Partial<TemplateContext> & Record<string, any>): string {
     this.ensureHelpers();
-    const template = Handlebars.compile(content);
+    // prompts are plain text: no HTML escaping (it turned "Sid Meier's" into "Sid Meier&#x27;s")
+    const template = Handlebars.compile(content, { noEscape: true });
 
     // current character should be the main scope, while keeping nested access via `character`
     const rootContext = {

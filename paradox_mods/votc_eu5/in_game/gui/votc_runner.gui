@@ -1,0 +1,31 @@
+# VOTC Bridge (GPL-3.0, see LICENSE.txt): applies the actions the VOTC app queued.
+# An invisible widget whose states loop every 2 seconds and run run\votc.txt. The file
+# only holds commands guarded by sequence numbers, so running it again changes nothing.
+# Console commands need the -debug_mode launch option.
+window = {
+	name = "votc_runner"
+	size = { 1 1 }
+	position = { -10 -10 }
+	movable = no
+	alwaystransparent = yes
+	# scripted widgets need a visible function (see the game's _scripted_widgets.info)
+	visible = "[EqualTo_CFixedPoint('(CFixedPoint)0', '(CFixedPoint)0')]"
+
+	state = {
+		name = _show
+		next = votc_tick_a
+		duration = 2
+	}
+	state = {
+		name = votc_tick_a
+		next = votc_tick_b
+		duration = 2
+		on_finish = "[ExecuteConsoleCommand('run votc.txt')]"
+	}
+	state = {
+		name = votc_tick_b
+		next = votc_tick_a
+		duration = 2
+		on_finish = "[ExecuteConsoleCommand('run votc.txt')]"
+	}
+}

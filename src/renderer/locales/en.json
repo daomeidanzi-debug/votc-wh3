@@ -274,7 +274,8 @@
     "selectPromptGroup": "Select prompt",
     "suffix": "Suffix",
     "template": "Template (Handlebars)",
-    "updatePreset": "Update preset"
+    "updatePreset": "Update preset",
+    "perGameHint": "These prompts belong to {{game}}. Every game keeps its own; switching games switches them."
   },
   "settings": {
     "actionApprovalHelp": "Configure when actions require user approval before execution. Destructive actions (like killing characters) always require approval when the corresponding setting is selected.",
@@ -283,7 +284,7 @@
     "approvalModeAll": "Auto-accept All (No actions require approval)",
     "approvalModeNonDestructive": "Auto-accept Non-destructive (Only destructive actions require approval)",
     "approvalModeNone": "No Auto-accept (All actions require approval)",
-    "ck3UserFolder": "Warhammer III Folder",
+    "ck3UserFolder": "Game Folder",
     "currentPath": "Current Path",
     "enableStreamingGlobally": "Enable Streaming Globally",
     "generateFollowingMessages": "Generate Following Messages",
@@ -299,14 +300,17 @@
     "showSettingsOnStartup": "Show Settings on Startup",
     "viewLettersStatus": "View Letters Status",
     "votcModLocation": "VOTC Mod Location",
-    "ck3UserFolderHelp": "Click the field below to select the Total War: WARHAMMER III install folder (the one that contains Warhammer3.exe). VOTC exchanges data with the votc_wh3 mod through files in this folder.",
+    "ck3UserFolderHelp": "Click the field below to select the folder of the game picked above: the install folder for Total War games, or Documents\\Paradox Interactive\\<game> for Paradox games. VOTC exchanges data with the game's VOTC mod through files there.",
     "ck3UserFolderExample": "YOUR_USERNAME",
-    "selectedCK3FolderTitle": "Selected Warhammer III Folder",
-    "selectCK3UserFolderTitle": "Select Warhammer III Install Folder",
+    "selectedCK3FolderTitle": "Selected Game Folder",
+    "selectCK3UserFolderTitle": "Select Game Folder",
     "allowPrerelease": "Receive Pre-release Updates",
     "allowPrereleaseHelp": "When enabled, you will receive beta and pre-release versions. These may be less stable but include the latest features.",
     "egline": "e.g.",
-    "ck3UserFolderClickToSelect": "click to select"
+    "ck3UserFolderClickToSelect": "click to select",
+    "gameTitle": "Game",
+    "gameFolderInstallHelp": "The game install folder (the one with the game .exe). The bridge files are written there.",
+    "gameFolderDocumentsHelp": "The game folder in Documents\\Paradox Interactive (with logs, mod and save games)."
   },
   "summaries": {
     "aboutSummaryGeneration": "About Summary Generation",
@@ -376,5 +380,18 @@
     "summariesManager": "Summaries Manager",
     "summariesManagerHelp": "View, edit, and manage conversation summaries for all characters. Summaries are organized by your player characters.",
     "summaryIndex": "Summary Index"
+  },
+  "talkPicker": {
+    "title": "Who do you want to talk to?",
+    "empty": "No data from the game yet. Enable the VOTC mod, load a save and let one in-game month pass (or use Talk in the game), then try again.",
+    "filter": "Search name, title or country",
+    "cancel": "Cancel",
+    "groupOwn": "Your people",
+    "groupLeaders": "Heads of state",
+    "groupPeople": "Other characters"
+  },
+  "commandsPending": {
+    "auto": "{{count}} agreed action(s) will be applied as soon as you are back in the game.",
+    "manual": "{{count}} action(s) waiting: open the game console and enter {{command}} (copied to the clipboard)."
   }
 }

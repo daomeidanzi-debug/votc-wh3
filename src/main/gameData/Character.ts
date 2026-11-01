@@ -1,5 +1,6 @@
 import {Memory, Trait, OpinionModifier, Secret, KnownSecret, Modifier, Stress, Legitimacy, Troops, Law, Income, Treasury, Influence, Herd, Parent, Child, Sibling} from "./GameData"
-import type { Wh3Character, Wh3Faction } from "../wh3/types";
+import type { Wh3Character, Wh3Faction } from "../games/totalwar/types";
+import type { PdxCharacterInfo } from "../games/paradox/types";
 import fs from 'fs';
 
 // Simple replacement for removeTooltip since parseLog.ts doesn't exist
@@ -76,7 +77,7 @@ export class Character {
     // Conversation summaries
     conversationSummaries: ConversationSummary[] = [];
 
-    /** Raw Warhammer III data from the game bridge (character + the faction they belong to). */
+    /** Raw Total War data from the game bridge (character + the faction they belong to); WH3 and Three Kingdoms. */
     wh3?: {
         character: Wh3Character,
         faction: Wh3Faction,
@@ -85,6 +86,12 @@ export class Character {
         /** user-written lore for the character's whole faction */
         factionBackstory?: string
     };
+
+    /** Raw Paradox data (HOI4, Victoria 3, EU5, Stellaris): the person and the country they speak for. */
+    pdx?: PdxCharacterInfo;
+
+    /** User-written backstory (CK3; Total War and Paradox keep theirs on wh3 / pdx). */
+    backstory?: string;
 
     /** A character with every field empty/zero, to be filled in by a game adapter. */
     static blank(): Character {

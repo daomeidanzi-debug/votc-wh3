@@ -1,0 +1,14 @@
+namespace = votc
+
+# Snapshot for the VOTC app (hidden)
+country_event = {
+	id = votc.1
+	hide_window = yes
+	is_triggered_only = yes
+	trigger = {
+		is_ai = no
+	}
+	immediate = {
+		votc_snapshot = yes
+	}
+}

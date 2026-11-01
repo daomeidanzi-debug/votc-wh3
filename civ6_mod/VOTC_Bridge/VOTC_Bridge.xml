@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- VOTC Bridge (GPL-3.0): the snapshot work is in VOTC_Bridge.lua. The button is moved into the
+     leader diplomacy screen (DiplomacyActionView) at load, so it shows only there. -->
+<Context Name="VOTC_Bridge">
+	<GridButton ID="VOTCTalkButton" Style="ButtonLightWeightGrid" Size="220,40" Anchor="R,T" Offset="24,96" Hidden="1">
+		<Label ID="VOTCTalkLabel" Anchor="C,C" Style="ButtonFont16" String="Talk (VOTC)"/>
+	</GridButton>
+</Context>

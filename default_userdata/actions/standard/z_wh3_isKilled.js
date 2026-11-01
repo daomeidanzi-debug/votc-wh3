@@ -1,8 +1,9 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
-// Warhammer III: the AI character dies (executed, slain in a duel, sacrificed...). The player is never killed.
+// Total War (Warhammer III, Three Kingdoms): the AI character dies (executed, slain in a duel, sacrificed...). The player is never killed.
 
 module.exports = {
   signature: "isKilled",
+  games: ["wh3", "tk", "attila"],
   title: {
     en: "Character Is Killed",
     zh: "角色被杀"

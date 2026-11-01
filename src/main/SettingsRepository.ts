@@ -14,6 +14,7 @@ import {
   DEFAULT_ACTIVE_PROVIDER,
 } from '@llmTypes';
 import { promptConfigManager } from './conversation/PromptConfigManager';
+import { isGameId, promptVariantsFor } from './games/types';
 import {
   encryptProviderConfigs,
   decryptProviderConfigs,
@@ -77,6 +78,19 @@ const schema: Schema<AppSettings> = {
   ck3UserFolderPath: {
     type: ['string', 'null'],
     default: null
+  },
+  activeGame: {
+    type: 'string',
+    default: 'ck3'
+  },
+  gameFolders: {
+    type: 'object',
+    default: {}
+  },
+  /** conversation prompt settings per game id; promptSettings is the pre-per-game value */
+  promptSettingsByGame: {
+    type: 'object',
+    default: {}
   },
   modLocationPath: {
     type: ['string', 'null'],
@@ -255,6 +269,17 @@ export class SettingsRepository {
     if (currentAppSettings.ck3UserFolderPath === undefined) {
         this.store.set('ck3UserFolderPath', null);
     }
+    // Warhammer III port settings: one folder for one game. Keep that game active.
+    // (schema defaults are written into the store, so a flag marks the migration)
+    const anyStore = this.store as unknown as Store<Record<string, unknown>>;
+    if (!anyStore.get('multiGameMigrated')) {
+        const legacy = this.store.get('ck3UserFolderPath');
+        if (legacy) {
+            this.store.set('gameFolders', { ...this.getGameFolders(), wh3: legacy });
+            this.store.set('activeGame', 'wh3');
+        }
+        anyStore.set('multiGameMigrated', true);
+    }
     if ((currentAppSettings as any).actionSettings === undefined) {
         this.store.set('actionSettings', { disabledActions: [], validation: {} } as any);
     }
@@ -371,6 +396,8 @@ export class SettingsRepository {
     return {
       llmSettings: this.getLLMSettings(),
       ck3UserFolderPath: this.getCK3UserFolderPath(),
+      activeGame: this.getActiveGame(),
+      gameFolders: this.getGameFolders(),
       modLocationPath: this.getModLocationPath(),
       globalStreamEnabled: this.getGlobalStreamSetting(),
       pauseOnRegeneration: this.getPauseOnRegenerationSetting(),
@@ -418,10 +445,22 @@ export class SettingsRepository {
     console.log('Global stream setting saved:', enabled);
   }
 
+  /** Folder of the active game: install folder (Total War) or Documents folder (Paradox games). */
   getCK3UserFolderPath(): string | null | undefined {
-     const path = this.store.get('ck3UserFolderPath');
-     console.log(`SettingsRepository.getCK3UserFolderPath: Returning ${path}`);
-     return path;
+     return this.getGameFolders()[this.getActiveGame()] ?? null;
+  }
+
+  getActiveGame(): string {
+    return this.store.get('activeGame', 'ck3') as string;
+  }
+
+  setActiveGame(game: string): void {
+    this.store.set('activeGame', game);
+    console.log('Active game saved:', game);
+  }
+
+  getGameFolders(): Record<string, string | null> {
+    return (this.store.get('gameFolders', {}) as Record<string, string | null>) || {};
   }
 
   getCK3DebugLogPath(): string | null {
@@ -431,10 +470,11 @@ export class SettingsRepository {
      return debugPath;
   }
 
+  /** Store the folder of the active game. */
   setCK3UserFolderPath(path: string | null): void {
-    console.log(`SettingsRepository.setCK3UserFolderPath: Setting path to ${path}`);
-    this.store.set('ck3UserFolderPath', path);
-    console.log('CK3 User Folder Path saved:', path);
+    const game = this.getActiveGame();
+    this.store.set('gameFolders', { ...this.getGameFolders(), [game]: path });
+    console.log(`Folder for ${game} saved:`, path);
   }
 
   getModLocationPath(): string | null | undefined {
@@ -510,25 +550,43 @@ export class SettingsRepository {
   }
 
   // --- Prompt settings ---
-  getPromptSettings(): PromptSettings {
-    const stored = this.store.get('promptSettings', this.getDefaultPromptSettings());
-    return promptConfigManager.normalizeSettings(stored, {
+  /**
+   * Conversation prompt settings of a game (default: the active one). Every game keeps its
+   * own; a game without saved settings starts from the shared pre-per-game settings. A main
+   * template the user never edited becomes that game's own default.
+   */
+  getPromptSettings(game: string = this.getActiveGame()): PromptSettings {
+    const byGame = this.store.get('promptSettingsByGame', {}) as Record<string, PromptSettings>;
+    const stored = byGame[game] ?? this.store.get('promptSettings', this.getDefaultPromptSettings());
+    const settings = promptConfigManager.normalizeSettings(stored, {
       defaultBlocks: promptConfigManager.getDefaultBlocks(),
       defaultMainTemplatePath: 'system/default.hbs',
       fallbackMainTemplate: promptConfigManager.getDefaultMainTemplateContent()
     });
+    const variants = isGameId(game) ? promptVariantsFor(game) : [];
+    return { ...settings, game, mainTemplate: promptConfigManager.mainTemplateForGame(settings.mainTemplate, variants) };
   }
 
+  /** Saves for the game named in the settings (so a late autosave never lands in another game), else the active one. */
   savePromptSettings(settings: PromptSettings): void {
-    this.store.set(
-      'promptSettings',
-      promptConfigManager.normalizeSettings(settings, {
+    const game = settings.game && isGameId(settings.game) ? settings.game : this.getActiveGame();
+    const byGame = { ...(this.store.get('promptSettingsByGame', {}) as Record<string, PromptSettings>) };
+    byGame[game] = {
+      ...promptConfigManager.normalizeSettings(settings, {
         defaultBlocks: promptConfigManager.getDefaultBlocks(),
         defaultMainTemplatePath: 'system/default.hbs',
         fallbackMainTemplate: promptConfigManager.getDefaultMainTemplateContent()
-      })
-    );
-    console.log('Prompt settings saved.');
+      }),
+      game,
+    };
+    this.store.set('promptSettingsByGame', byGame);
+    console.log(`Prompt settings saved for ${game}.`);
+  }
+
+  /** The shipped main template of a game (the "reset" target). */
+  getDefaultMainTemplateForGame(game: string = this.getActiveGame()): string {
+    const variants = isGameId(game) ? promptVariantsFor(game) : [];
+    return promptConfigManager.mainTemplateForGame(promptConfigManager.getDefaultMainTemplateContent(), variants);
   }
 
   getLetterPromptSettings(): PromptSettings {

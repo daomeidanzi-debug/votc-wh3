@@ -39,13 +39,15 @@ export class SummariesManager {
         
         // Try to get player name from the player character's summary file (file with same name as folder)
         let playerName: string | undefined;
-        // Warhammer III: folders are campaigns; show "<player> - <faction> (turn N)" from the campaign info
+        // Total War / Paradox games: folders are campaigns; show "<player> - <faction> (turn N / date)" from the campaign info
         const campaignInfoFile = path.join(playerPath, CAMPAIGN_INFO_FILE);
         if (fs.existsSync(campaignInfoFile)) {
           try {
             const info = JSON.parse(fs.readFileSync(campaignInfoFile, 'utf8'));
             if (info && typeof info.playerName === 'string') {
-              playerName = `${info.playerName}${info.playerFaction ? ` - ${info.playerFaction}` : ''}${info.lastTurn ? ` (turn ${info.lastTurn})` : ''}`;
+              const when = info.lastTurn ? ` (turn ${info.lastTurn})` : info.lastDate ? ` (${info.lastDate})` : '';
+              const game = typeof info.game === 'string' && info.game !== 'wh3' ? `[${info.game}] ` : '';
+              playerName = `${game}${info.playerName}${info.playerFaction ? ` - ${info.playerFaction}` : ''}${when}`;
             }
           } catch (error) {
             console.warn(`Failed to read campaign info from ${campaignInfoFile}:`, error);

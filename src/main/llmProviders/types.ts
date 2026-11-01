@@ -306,6 +306,8 @@ export interface SuffixConfig {
 
 // Prompt system configuration stored in settings
 export interface PromptSettings {
+  /** the game these settings belong to (every game keeps its own conversation prompts) */
+  game?: string;
   mainTemplate: string; // Handlebars source for the main system prompt
   defaultMainTemplatePath: string; // Relative path to the default template on disk
   blocks: PromptBlock[]; // Ordered blocks that make up the prompt
@@ -337,7 +339,14 @@ export interface SummaryPromptSettings {
 
 export interface AppSettings {
   llmSettings: LLMSettings;
+  /** folder of the active game (kept under its historical CK3 name) */
   ck3UserFolderPath?: string | null;
+  /** which game the app talks to: ck3, wh3, tk, hoi4, vic3, eu5, stellaris */
+  activeGame?: string;
+  /** configured folder per game id */
+  gameFolders?: Record<string, string | null>;
+  /** conversation prompt settings per game id */
+  promptSettingsByGame?: Record<string, PromptSettings>;
   modLocationPath?: string | null;
   globalStreamEnabled?: boolean; // Global toggle for streaming
   pauseOnRegeneration?: boolean; // Pause conversation after regenerating a message

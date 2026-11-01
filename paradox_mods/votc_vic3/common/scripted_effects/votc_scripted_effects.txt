@@ -1,0 +1,221 @@
+﻿# VOTC Bridge for Victoria 3 (GPL-3.0, see LICENSE.txt).
+# Line format: see src/main/games/paradox/types.ts in the VOTC source.
+# The player's country is saved as scope:votc_player, so these effects also work where
+# root is something else (character interactions).
+
+# a random campaign id the first time (17 coin flips: 0..131071, plus 100000)
+votc_ensure_campaign_id = {
+	if = {
+		limit = { NOT = { has_global_variable = votc_campaign } }
+		set_global_variable = { name = votc_campaign value = 100000 }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 1 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 2 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 4 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 8 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 16 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 32 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 64 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 128 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 256 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 512 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 1024 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 2048 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 4096 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 8192 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 16384 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 32768 } } 50 = {} }
+		random_list = { 50 = { change_global_variable = { name = votc_campaign add = 65536 } } 50 = {} }
+	}
+	if = {
+		limit = { NOT = { has_global_variable = votc_seq } }
+		set_global_variable = { name = votc_seq value = 0 }
+	}
+}
+
+# THIS = the player's country. A whole snapshot (monthly, on load, refresh command).
+votc_snapshot = {
+	votc_snapshot_open = { REASON = $REASON$ }
+	votc_snapshot_close = yes
+}
+
+# THIS = the player's country: BEGIN, campaign data, the player and the countries that matter.
+# Callers may log more (characters, a talk request) before votc_snapshot_close.
+votc_snapshot_open = {
+	save_scope_as = votc_player
+	votc_ensure_campaign_id = yes
+	debug_log = "VOTC|BEGIN|vic3|2|$REASON$"
+	debug_log = "VOTC|META|campaign|[GetGlobalVariable('votc_campaign').GetValue|0]"
+	debug_log = "VOTC|META|seq|[GetGlobalVariable('votc_seq').GetValue|0]"
+	debug_log = "VOTC|META|date|[TimeKeeper.GetCurrentDate.GetString]"
+	debug_log = "VOTC|P|tag|[THIS.GetCountry.GetTagName]"
+	debug_log = "VOTC|P|name|[THIS.GetCountry.GetNameNoFormatting]"
+	debug_log = "VOTC|P|leader|[THIS.GetCountry.GetRuler.GetFullNameNoFormatting]"
+	debug_log = "VOTC|P|leader_title|[THIS.GetCountry.GetRuler.GetPrimaryRoleTitle]"
+	debug_log = "VOTC|P|government|[THIS.GetCountry.GetGovernment.GetName]"
+	debug_log = "VOTC|P|capital|[THIS.GetCountry.GetCapital.GetName]"
+	debug_log = "VOTC|P|rank|[THIS.GetCountry.GetRankName]"
+	debug_log = "VOTC|P|gdp|[THIS.GetCountry.GetGDP|D]"
+	# the player's wars and alliances are public knowledge
+	every_country = {
+		limit = { has_war_with = scope:votc_player }
+		debug_log = "VOTC|P|war_with|[THIS.GetCountry.GetNameNoFormatting]"
+	}
+	every_country = {
+		limit = { has_diplomatic_pact = { who = scope:votc_player type = alliance } }
+		debug_log = "VOTC|P|allies|[THIS.GetCountry.GetNameNoFormatting]"
+	}
+	every_country = {
+		limit = { votc_is_relevant_country = yes }
+		votc_log_country = yes
+	}
+}
+
+votc_snapshot_close = {
+	debug_log = "VOTC|END"
+}
+
+# THIS = a country, scope:votc_player = the player's country
+votc_log_country = {
+	save_scope_as = votc_c
+	debug_log = "VOTC|C|[THIS.GetCountry.GetTagName]|name|[THIS.GetCountry.GetNameNoFormatting]"
+	debug_log = "VOTC|C|[THIS.GetCountry.GetTagName]|leader|[THIS.GetCountry.GetRuler.GetFullNameNoFormatting]"
+	debug_log = "VOTC|C|[THIS.GetCountry.GetTagName]|leader_title|[THIS.GetCountry.GetRuler.GetPrimaryRoleTitle]"
+	debug_log = "VOTC|C|[THIS.GetCountry.GetTagName]|government|[THIS.GetCountry.GetGovernment.GetName]"
+	debug_log = "VOTC|C|[THIS.GetCountry.GetTagName]|capital|[THIS.GetCountry.GetCapital.GetName]"
+	debug_log = "VOTC|C|[THIS.GetCountry.GetTagName]|rank|[THIS.GetCountry.GetRankName]"
+	debug_log = "VOTC|C|[THIS.GetCountry.GetTagName]|gdp|[THIS.GetCountry.GetGDP|D]"
+	# its wars and alliances with anyone (the world situation)
+	every_country = {
+		limit = { has_war_with = scope:votc_c }
+		debug_log = "VOTC|C|[SCOPE.sCountry('votc_c').GetTagName]|war_with|[THIS.GetCountry.GetNameNoFormatting]"
+	}
+	every_country = {
+		limit = { has_diplomatic_pact = { who = scope:votc_c type = alliance } }
+		debug_log = "VOTC|C|[SCOPE.sCountry('votc_c').GetTagName]|allies|[THIS.GetCountry.GetNameNoFormatting]"
+	}
+	if = {
+		limit = { has_war_with = scope:votc_player }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|war|yes"
+	}
+	if = {
+		limit = { has_diplomatic_pact = { who = scope:votc_player type = alliance } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|ally|yes"
+	}
+	if = {
+		limit = { has_diplomatic_pact = { who = scope:votc_player type = defensive_pact } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|defensive_pact|yes"
+	}
+	if = {
+		limit = { has_diplomatic_pact = { who = scope:votc_player type = rivalry } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|rival|yes"
+	}
+	if = {
+		limit = { is_subject_of = scope:votc_player }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|subject|yes"
+	}
+	if = {
+		limit = { scope:votc_player = { is_subject_of = prev } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|overlord|yes"
+	}
+	# relations with the player, in the game's own steps
+	if = {
+		limit = { scope:votc_player = { relations:prev >= relations_threshold:friendly } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|opinion|90"
+	}
+	else_if = {
+		limit = { scope:votc_player = { relations:prev >= relations_threshold:amicable } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|opinion|60"
+	}
+	else_if = {
+		limit = { scope:votc_player = { relations:prev >= relations_threshold:cordial } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|opinion|30"
+	}
+	else_if = {
+		limit = { scope:votc_player = { relations:prev >= relations_threshold:neutral } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|opinion|0"
+	}
+	else_if = {
+		limit = { scope:votc_player = { relations:prev >= relations_threshold:poor } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|opinion|-30"
+	}
+	else_if = {
+		limit = { scope:votc_player = { relations:prev >= relations_threshold:cold } }
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|opinion|-60"
+	}
+	else = {
+		debug_log = "VOTC|R|[THIS.GetCountry.GetTagName]|opinion|-90"
+	}
+}
+
+# THIS = a character the player clicked "Talk (VOTC)" on, scope:actor = the player's country.
+votc_talk_to_character = {
+	save_scope_as = votc_talker
+	# the app's character commands (gain a trait, exile...) act on this character
+	set_global_variable = { name = votc_talker value = this }
+	scope:actor = { votc_snapshot_open = { REASON = talk } }
+	debug_log = "VOTC|META|talk|character"
+	debug_log = "VOTC|META|talk_tag|[THIS.GetCharacter.GetCountry.GetTagName]"
+	debug_log = "VOTC|META|talk_name|[THIS.GetCharacter.GetFullNameNoFormatting]"
+	votc_log_character = yes
+	# the character's country, when the monthly list does not have it
+	if = {
+		limit = {
+			exists = owner
+			NOT = { owner = scope:votc_player }
+		}
+		owner = {
+			if = {
+				limit = { NOT = { votc_is_relevant_country = yes } }
+				votc_log_country = yes
+			}
+		}
+	}
+	scope:actor = { votc_snapshot_close = yes }
+}
+
+# The "Talk (VOTC)" diplomatic action. THIS = the player's country, scope:target_country =
+# the other country: logs it with all its characters; the app opens the list.
+votc_talk_to_country = {
+	votc_snapshot_open = { REASON = talk }
+	debug_log = "VOTC|META|talk|country"
+	scope:target_country = {
+		debug_log = "VOTC|META|talk_tag|[THIS.GetCountry.GetTagName]"
+		if = {
+			limit = { NOT = { votc_is_relevant_country = yes } }
+			votc_log_country = yes
+		}
+		every_scope_character = {
+			limit = { is_character_alive = yes }
+			votc_log_character = yes
+		}
+	}
+	votc_snapshot_close = yes
+}
+
+# THIS = a character
+votc_log_character = {
+	debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|title|[THIS.GetCharacter.GetPrimaryRoleTitle]"
+	debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|age|[THIS.GetCharacter.GetAge]"
+	debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|ideology|[THIS.GetCharacter.GetIdeology.GetName]"
+	debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|interest_group|[THIS.GetCharacter.GetInterestGroup.GetName]"
+	debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|culture|[THIS.GetCharacter.GetCulture.GetName]"
+	debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|religion|[THIS.GetCharacter.GetReligion.GetName]"
+	debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|popularity|[THIS.GetCharacter.GetPopularity]"
+	debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|location|[THIS.GetCharacter.GetHomeState.GetName]"
+	if = {
+		limit = { is_female = yes }
+		debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|gender|female"
+	}
+	else = {
+		debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|gender|male"
+	}
+	if = {
+		limit = { is_ruler_of_own_country = yes }
+		debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|ruler|yes"
+	}
+	if = {
+		limit = { is_in_exile_pool = yes }
+		debug_log = "VOTC|CH|[THIS.GetCharacter.GetCountry.GetTagName]|[THIS.GetCharacter.GetFullNameNoFormatting]|status|in exile"
+	}
+	votc_log_character_traits = yes
+}

@@ -1,0 +1,28 @@
+﻿# VOTC Bridge (GPL-3.0, see LICENSE.txt): "Talk (VOTC)" on the right-click menu and character
+# panel. Victoria 3 only lists interactions for your own characters and exiles; foreign people
+# are reached with the "Talk (VOTC)" diplomatic action (votc_diplomatic_actions.txt).
+# Logs the character and the countries involved; the VOTC app opens the conversation.
+# Changes nothing in the game.
+#
+# root = the character, scope:actor = the player's country
+
+votc_talk = {
+	icon = "gfx/interface/icons/generic_icons/ig_bolster.dds"
+	clicksound = "event:/SFX/DLC/1.3_ip1/UI/character_invite"
+
+	potential = {
+		scope:actor ?= { is_player = yes }
+	}
+
+	possible = {
+		always = yes
+	}
+
+	effect = {
+		votc_talk_to_character = yes
+	}
+
+	ai_chance = {
+		value = 0
+	}
+}

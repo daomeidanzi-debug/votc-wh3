@@ -3,6 +3,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import activeWin from 'active-win';
 import { app } from 'electron';
+import { activeGame } from './games';
 
 const execFileAsync = promisify(execFile);
 
@@ -21,7 +22,7 @@ interface ActiveApp {
 
 /**
  * Monitors the currently focused window and determines if the app should be in overlay mode.
- * Overlay mode is active when Warhammer III or the app itself is focused.
+ * Overlay mode is active when the active game or the app itself is focused.
  */
 export class FocusMonitor extends EventEmitter {
   private pollingTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -263,15 +264,14 @@ export class FocusMonitor extends EventEmitter {
   /**
    * Determine if the app should be in overlay mode based on the frontmost app.
    *
-   * Game detection (Windows only, like Warhammer III itself):
-   *  - the `Warhammer3.exe` process.
+   * Game detection: the active game's window (see GameAdapter.isGameWindow).
    */
   private shouldBeInOverlayMode(activeApp: ActiveApp): boolean {
     const name = activeApp.name.toLowerCase();
     const bundleId = activeApp.bundleId.toLowerCase();
     const appPath = activeApp.path.toLowerCase();
 
-    // --- Warhammer III ---
+    // --- the active game ---
     if (this.isCk3App(activeApp)) {
       return true;
     }
@@ -311,20 +311,11 @@ export class FocusMonitor extends EventEmitter {
   }
 
   /**
-   * Whether the given app is Total War: WARHAMMER III (`Warhammer3.exe`).
-   * Shared by overlay-mode logic and
-   * {@link isGameFocused}.
+   * Whether the given app is the active game (CK3, Warhammer III, Three Kingdoms, HOI4, ...).
+   * Shared by overlay-mode logic and {@link isGameFocused}.
    */
   private isCk3App(activeApp: ActiveApp): boolean {
-    // Total War: WARHAMMER III (Warhammer3.exe)
-    const name = activeApp.name.toLowerCase();
-    const appPath = activeApp.path.toLowerCase();
-    return (
-      name.includes('warhammer3') ||
-      name.includes('warhammer iii') ||
-      appPath.endsWith('warhammer3.exe') ||
-      appPath.includes('total war warhammer iii')
-    );
+    return activeGame().isGameWindow({ name: activeApp.name, path: activeApp.path });
   }
 
   /**

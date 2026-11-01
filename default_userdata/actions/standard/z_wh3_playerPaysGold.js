@@ -1,5 +1,5 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
-// Warhammer III: the player's faction pays gold to the AI character's faction.
+// Total War (Warhammer III, Three Kingdoms): the player's faction pays gold to the AI character's faction.
 
 const ctx = (gameData, npc) => {
   const player = gameData.characters.get(gameData.playerID);
@@ -10,6 +10,7 @@ const ctx = (gameData, npc) => {
 
 module.exports = {
   signature: "playerPaysGold",
+  games: ["wh3", "tk", "attila"],
   title: {
     en: "Player Pays Gold",
     zh: "玩家支付金币"

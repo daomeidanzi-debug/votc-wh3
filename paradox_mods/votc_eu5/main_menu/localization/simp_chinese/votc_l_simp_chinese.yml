@@ -1,0 +1,8 @@
+﻿l_simp_chinese:
+ votc_talk: "交谈（VOTC）"
+ votc_talk_concept: "[character|e]"
+ votc_talk_act: "$votc_talk$"
+ votc_talk_desc: "在 VOTC 程序里与这位[character|e]对话。"
+ votc_talk_desc_specific: "在 VOTC 程序里与[recipient.GetName]对话。"
+ votc_talk_past: "与[recipient.GetName]交谈"
+ votc_talk_act_past: "与[recipient.GetName]交谈过。"

@@ -1,13 +1,14 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LLMProviderConfig } from '@llmTypes';
-import { useConfigStore, useAppSettings } from '../store/useConfigStore';
+import { useConfigStore } from '../store/useConfigStore';
 import { DEFAULT_PARAMETERS } from '@llmTypes';
 
 import ModelSelector from './ModelSelector';
 import ContextLengthField from './ContextLengthField';
 import FormGroupInput from './FormGroupInput';
 import Tooltip from './Tooltip';
+import GameSelector from './GameSelector';
 import { OpenRouterConfigFieldsComponent, OpenAICompatibleConfigFieldsComponent, OllamaConfigFieldsComponent, DeepseekConfigFieldsComponent, GeminiConfigFieldsComponent } from './ConfigFields';
 import SegmentedSwitch from './SegmentedSwitch';
 import ConnectionTestPanel from './ConnectionTestPanel';
@@ -163,21 +164,16 @@ interface ProviderConfigPanelProps {
 
 const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = (props) => {
   const { t } = useTranslation();
-  const appSettings = useAppSettings();
   const {
     config,
     onInputChange,
     onContextLengthChange,
     onMakePreset,
   } = props;
-  const selectCK3Folder = useConfigStore((state) => state.selectCK3Folder);
   const player2Health = useConfigStore((state) => state.player2Health);
   const checkPlayer2Health = useConfigStore((state) => state.checkPlayer2Health);
 
   const updateEditingConfig = useConfigStore((state) => state.updateEditingConfig);
-  const handleSelectCK3Folder = async () => {
-    await selectCK3Folder();
-  };
 
   if (!config.providerType) {
     return (
@@ -201,25 +197,9 @@ const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = (props) => {
     }
   }, [config.providerType, checkPlayer2Health]);
 
-  const hasSelectedPath = appSettings?.ck3UserFolderPath && appSettings.ck3UserFolderPath.trim() !== '';
-
   return (
     <div className="provider-config-panel">
-      <div className="form-group ck3-folder-section">
-        <label>
-          {hasSelectedPath ? t('settings.selectedCK3FolderTitle') : t('settings.selectCK3UserFolderTitle')}
-          <Tooltip text={t('settings.ck3UserFolderHelp')} position="bottom" />
-        </label>
-        <div className={`ck3-path-display ${hasSelectedPath ? 'selected' : ''}`} onClick={handleSelectCK3Folder}>
-          {hasSelectedPath ? (
-            <span className="selected-path">{appSettings.ck3UserFolderPath}</span>
-          ) : (
-            <span className="example-path-text">
-             <span className="example-highlight">{t('settings.egline')}</span> C:\Program Files (x86)\Steam\steamapps\common\Total War WARHAMMER III <span className="example-highlight" style={{fontStyle: 'italic'}}>({t('settings.ck3UserFolderClickToSelect')})</span>
-            </span>
-          )}
-        </div>
-      </div>
+      <GameSelector />
 
       <h3>
         {isPreset ? `${t('config.preset')}: ${displayName}` : `${displayName} ${t('config.configuration')}`}

@@ -3,6 +3,7 @@
 
 module.exports = {
   signature: "isWounded",
+  games: ["wh3"],
   title: {
     en: "Is Wounded",
     zh: "负伤"

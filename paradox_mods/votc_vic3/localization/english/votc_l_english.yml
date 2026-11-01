@@ -1,0 +1,9 @@
+﻿l_english:
+ votc_talk: "Talk (VOTC)"
+ votc_talk_desc: "Open a conversation with [Character.GetFullName] in the VOTC app."
+ votc_talk_country:0 "Talk (VOTC)"
+ votc_talk_country_action_name:0 "Talk (VOTC)"
+ votc_talk_country_action_propose_name:0 "Talk (VOTC)"
+ votc_talk_country_desc:0 "Talk with the ruler or anyone else of this country in the VOTC app (a list of its people opens there). Changes nothing in the game."
+ votc_talk_country_action_notification_name:0 "A conversation"
+ votc_talk_country_action_notification_desc:0 "[INITIATOR_COUNTRY.GetName] seeks a conversation."

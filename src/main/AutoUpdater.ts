@@ -289,7 +289,7 @@ export class AppUpdater {
 
   public checkForUpdates() {
     if (UPDATES_DISABLED) {
-      log.info('Update check skipped: the Warhammer III port has no update feed of its own');
+      log.info('Update check skipped: this multi-game build has no update feed of its own');
       return;
     }
     log.info('Checking for updates...');

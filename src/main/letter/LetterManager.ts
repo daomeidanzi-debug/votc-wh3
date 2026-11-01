@@ -11,7 +11,8 @@ import { GameData } from "../gameData/GameData";
 import type { ILLMMessage } from "@llmTypes";
 import { TokenCounter } from "../utils";
 
-const LETTERS_ENABLED = false;
+/** Letters are a CK3 feature (driven by debug.log); the other games have no equivalent. */
+const lettersEnabled = () => settingsRepository.getActiveGame() === 'ck3';
 
 export class LetterManager {
   private currentTotalDays: number = 0;
@@ -23,9 +24,8 @@ export class LetterManager {
   private readonly CLEAN_INTERVAL_MS: number = 300000; // 5 minutes
 
   constructor() {
-    // Letters are a CK3 feature (driven by debug.log); Warhammer III has no equivalent.
-    if (!LETTERS_ENABLED) {
-      console.log("LetterManager: letters are disabled in the Warhammer III port");
+    if (!lettersEnabled()) {
+      console.log("LetterManager: letters are only available in CK3");
       return;
     }
     // Only start tailing if CK3 path is already configured
@@ -41,7 +41,7 @@ export class LetterManager {
    * Start tailing the debug.log file to track VOTC:DATE updates
    */
   private async startLogTailing(): Promise<void> {
-    if (!LETTERS_ENABLED) return;
+    if (!lettersEnabled()) return;
     const ck3UserPath = settingsRepository.getCK3UserFolderPath();
     console.log(`LetterManager: CK3 user path from settings: ${ck3UserPath}`);
     

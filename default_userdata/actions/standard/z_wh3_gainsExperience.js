@@ -1,8 +1,9 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
-// Warhammer III: a character gains ranks (levels) from training, counsel or a revelation.
+// Total War (Warhammer III, Three Kingdoms): a character gains ranks (levels) from training, counsel or a revelation.
 
 module.exports = {
   signature: "gainsExperience",
+  games: ["wh3", "tk", "attila"],
   title: {
     en: "Gains Experience",
     zh: "获得经验"

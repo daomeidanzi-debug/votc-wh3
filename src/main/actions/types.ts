@@ -61,7 +61,10 @@ export interface ActionCheckResult {
   reason?: string;
 }
 
-/** A Warhammer III bridge command, e.g. `{ op: "war", a: "<faction key>", b: "<faction key>" }`, or its JSON text. */
+/**
+ * A game effect: a bridge command such as `{ op: "war", a: "<faction key>", b: "<faction key>" }`
+ * (or its JSON text) for Total War and Paradox games, or effect script for CK3.
+ */
 export type GameCommand = Record<string, string | number | boolean | null | undefined> | string;
 
 export interface ActionRunContext {
@@ -88,8 +91,13 @@ export interface ActionDefinition {
   description: I18nString | DynamicDescriptionFunction;
   args: ActionArgumentDefinition[] | DynamicArgsFunction;
   isDestructive?: boolean; // New field to mark destructive actions
-  /** Warhammer III: also offer this action when the NPC is a rank-and-file unit (default: no) */
+  /** Total War: also offer this action when the NPC is a rank-and-file unit (default: no) */
   allowUnits?: boolean;
+  /**
+   * Games this action belongs to (ck3, wh3, tk, hoi4, vic3, eu5, stellaris). Omitted: every
+   * game, so a custom action should name its game unless it only talks.
+   */
+  games?: string[];
   check: (context: ActionCheckContext) => Promise<ActionCheckResult> | ActionCheckResult;
   run: (context: ActionRunContext) => Promise<I18nString | ActionFeedback | void> | I18nString | ActionFeedback | void;
 }

@@ -1,0 +1,8 @@
+﻿l_english:
+ votc_talk: "Talk (VOTC)"
+ votc_talk_concept: "[character|e]"
+ votc_talk_act: "$votc_talk$"
+ votc_talk_desc: "Open a conversation with this [character|e] in the VOTC app."
+ votc_talk_desc_specific: "Talk with [recipient.GetName] in the VOTC app."
+ votc_talk_past: "Talked with [recipient.GetName]"
+ votc_talk_act_past: "Talked with [recipient.GetName]."

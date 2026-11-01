@@ -19,13 +19,40 @@ export interface SummaryMetadata {
 
 // Types for initialization warnings
 export interface InitializationWarning {
-  type: 'permission' | 'path_not_found' | 'path_detection' | 'mod_missing';
+  type: 'permission' | 'path_not_found' | 'path_detection' | 'mod_missing' | 'debug_mode';
   message: string;
   suggestion?: string;
 }
 
+export interface GameInfo {
+  id: string;
+  name: string;
+  folderKind: string;
+  folderExample: string;
+  talkHint: string;
+}
+
+export interface TalkTargetInfo {
+  id: string;
+  name: string;
+  leader: string;
+  leaderTitle: string;
+  status: string;
+  /** 'own' (the player's people), 'leaders' (heads of other countries), 'people' (other characters) */
+  group?: 'own' | 'leaders' | 'people';
+}
+
 declare global {
   interface Window {
+    gameAPI: {
+      listGames: () => Promise<GameInfo[]>;
+      getActiveGame: () => Promise<{ id: string; folder: string | null }>;
+      setActiveGame: (id: string) => Promise<{ id: string; folder: string | null; warnings: InitializationWarning[] }>;
+      listTalkTargets: (tag?: string) => Promise<TalkTargetInfo[]>;
+      startTalk: (targetId: string) => Promise<void>;
+      onTalkPick: (callback: (targets: TalkTargetInfo[]) => void) => () => void;
+      onCommandsPending: (callback: (info: { count: number; runCommand: string; auto?: boolean }) => void) => () => void;
+    };
     conversationAPI: {
       sendMessage: (userMessage: string) => Promise<{streamStarted?: boolean, message?: any, error?: string}>;
       reset: () => Promise<boolean>;
@@ -79,7 +106,7 @@ declare global {
       onTestConnectionProgress: (callback: (p: { step: string; status: string; message?: string }) => void) => () => void;
       cancelTestConnection: () => Promise<boolean>;
       checkPlayer2Health: () => Promise<{success: boolean, client_version?: string, error?: string, message?: string, code?: number}>;
-      setCK3Folder: (path: string | null) => Promise<void>;
+      setCK3Folder: (path: string | null) => Promise<string | null | undefined>;
       setModLocationPath: (path: string | null) => Promise<void>;
       selectFolder: () => Promise<string | null>;
       saveGlobalStreamSetting: (enabled: boolean) => Promise<void>;

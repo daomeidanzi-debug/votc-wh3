@@ -1,0 +1,38 @@
+# VOTC Bridge (GPL-3.0, see LICENSE.txt): buttons of common/scripted_guis/votc_scripted_guis.txt
+guiTypes = {
+	containerWindowType = {
+		name = "votc_talk_diplomacy_window"
+		position = { x = 20 y = -50 }
+		size = { width = 160 height = 40 }
+		orientation = lower_left
+		clipping = no
+
+		buttonType = {
+			name = "votc_talk_button"
+			quadTextureSprite = "GFX_button_148x34"
+			position = { x = 0 y = 0 }
+			buttonText = "VOTC_TALK_BUTTON"
+			buttonFont = "hoi_16mbs"
+			pdx_tooltip = "VOTC_TALK_BUTTON_TT"
+			clicksound = click_default
+		}
+	}
+
+	containerWindowType = {
+		name = "votc_talk_top_bar_window"
+		position = { x = -160 y = 80 }
+		size = { width = 160 height = 40 }
+		orientation = upper_right
+		clipping = no
+
+		buttonType = {
+			name = "votc_top_button"
+			quadTextureSprite = "GFX_button_148x34"
+			position = { x = 0 y = 0 }
+			buttonText = "VOTC_TOP_BUTTON"
+			buttonFont = "hoi_16mbs"
+			pdx_tooltip = "VOTC_TOP_BUTTON_TT"
+			clicksound = click_default
+		}
+	}
+}

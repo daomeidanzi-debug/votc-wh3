@@ -1,4 +1,4 @@
-// Total War: WARHAMMER III persona builder.
+// Total War persona builder (Warhammer III and Three Kingdoms).
 // Exports a function (gameData, currentCharacterId?) => string
 
 /**@typedef {import('../../../gamedata_typedefs').GameData} GameData */
@@ -23,7 +23,10 @@ module.exports = (gameData, currentCharacterId) => {
         `scene(${gameData.scene})`,
         gameData.location ? `location(${gameData.location}${gameData.locationController ? `, held by ${gameData.locationController}` : ""})` : null,
     ].filter(Boolean);
-    output += `[Setting: Total War: WARHAMMER III campaign; ${scene.join("; ")}]`;
+    if (gameData.wh3 && gameData.wh3.world && gameData.wh3.world.length) {
+        output += `[The realm as everyone knows it: ${gameData.wh3.world.join(" | ")}]\n`;
+    }
+    output += `[Setting: ${gameData.gameName} campaign, ${gameData.gameSetting}; ${scene.join("; ")}]`;
     if (info && !info.sameFaction) {
         output += `\n[Diplomacy between ${info.playerFaction.name} and ${info.targetFaction.name}: ${describeRelation(info.targetFaction)}]`;
     }
@@ -95,6 +98,20 @@ const VOICES = {
     wh_main_sc_teb_teb: "mercenary-minded noble of the Southern Realms (Tilea/Estalia), pragmatic and fond of gold and intrigue",
 };
 
+// Three Kingdoms: family and personal bonds the game tracks
+function familyItems(c) {
+    const items = [];
+    const fam = c.family || {};
+    if (fam.spouse) items.push(`spouse(${fam.spouse})`);
+    if (fam.father) items.push(`father(${fam.father})`);
+    if (fam.mother) items.push(`mother(${fam.mother})`);
+    if (fam.children && fam.children.length) items.push(`children(${fam.children.join(", ")})`);
+    const byKind = {};
+    for (const r of c.relationships || []) (byKind[r.kind] = byKind[r.kind] || []).push(r.name);
+    for (const [kind, names] of Object.entries(byKind)) items.push(`${kind}(${names.join(", ")})`);
+    return items;
+}
+
 function buildCharacterItems(char, gameData) {
     const w = char.wh3;
     const items = [];
@@ -107,9 +124,16 @@ function buildCharacterItems(char, gameData) {
     const c = w.character;
     const f = w.faction;
     const isPlayer = char.id === gameData.playerID;
+    // a foreign character sees the player's faction from outside: no treasury, no army count
+    const outsider = isPlayer && !(gameData.wh3 && gameData.wh3.sameFaction);
     items.push(`role(${c.isFactionLeader ? `faction leader of ${f.name}` : `${TYPE_LABELS[c.typeKey] || c.typeKey} of ${f.name}`})`);
-    if (c.subtypeName) items.push(`kind(${c.subtypeName})`);
-    items.push(`race(${f.subcultureName || f.cultureName})`);
+    if (c.subtypeName && !c.className) items.push(`kind(${c.subtypeName})`);
+    // Three Kingdoms: class (element), court office and satisfaction with their lord
+    if (c.className) items.push(`class(${c.className})`);
+    if (c.postName) items.push(`office(${c.postName})`);
+    if (typeof c.satisfaction === "number" && !c.isFactionLeader) items.push(`satisfaction with their lord(${c.satisfaction})`);
+    items.push(...familyItems(c));
+    if (f.subcultureName || f.cultureName) items.push(`race(${f.subcultureName || f.cultureName})`);
     if (VOICES[f.subcultureKey]) items.push(`voice(${VOICES[f.subcultureKey]})`);
     if (c.isUnit) {
         items.push(`regiment(${c.subtypeName}${typeof c.strength === "number" ? `, at ${c.strength}% strength` : ""})`);
@@ -129,13 +153,16 @@ function buildCharacterItems(char, gameData) {
         const units = c.army.units.map((u) => `${u.name} x${u.count}`).join(", ");
         items.push(`army(${c.army.unitCount} unit slots${units ? `: ${units}` : ""}${c.army.heroes.length ? `; heroes: ${c.army.heroes.join(", ")}` : ""})`);
     }
-    items.push(`faction(${f.name}: ${f.regionCount} settlements${f.capitalName ? `, capital ${f.capitalName}` : ""}, ${f.armyCount} armies, treasury ${Math.floor(f.treasury)} gold)`);
+    items.push(outsider
+        ? `faction(${f.name}: ${f.regionCount} settlements${f.capitalName ? `, capital ${f.capitalName}` : ""}; its treasury and armies are not known to outsiders)`
+        : `faction(${f.name}: ${f.regionCount} settlements${f.capitalName ? `, capital ${f.capitalName}` : ""}, ${f.armyCount} armies, treasury ${Math.floor(f.treasury)} gold)`);
     if (f.atWarWith && f.atWarWith.length) items.push(`faction at war with(${f.atWarWith.map((x) => x.name).join(", ")})`);
     if (!isPlayer) {
         if (gameData.wh3 && gameData.wh3.sameFaction) {
             items.push(`relationship(serves the player's own faction)`);
         } else {
-            items.push(`attitude towards player's faction(${char.opinionOfPlayer}, ${attitudeWord(char.opinionOfPlayer)})`);
+            // Attila's scripts cannot read diplomatic attitude: say nothing rather than a made-up 0
+            if (typeof f.attitudeToPlayer === "number") items.push(`attitude towards player's faction(${char.opinionOfPlayer}, ${attitudeWord(char.opinionOfPlayer)})`);
         }
     } else {
         items.push("the player");
@@ -159,6 +186,6 @@ function describeRelation(f) {
     if (f.isMasterOfPlayer) parts.push(`${f.name} is the player's overlord`);
     if (f.tradingWithPlayer) parts.push("trade partners");
     if (parts.length === 0) parts.push("no treaty");
-    parts.push(`their attitude to the player: ${f.attitudeToPlayer} (${attitudeWord(f.attitudeToPlayer)})`);
+    if (typeof f.attitudeToPlayer === "number") parts.push(`their attitude to the player: ${f.attitudeToPlayer} (${attitudeWord(f.attitudeToPlayer)})`);
     return parts.join(", ");
 }

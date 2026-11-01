@@ -1,5 +1,5 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
-// Warhammer III: the AI character's faction hands one of its settlements to the player's faction.
+// Total War (Warhammer III, Three Kingdoms): the AI character's faction hands one of its settlements to the player's faction.
 
 const ctx = (gameData, npc) => {
   const player = gameData.characters.get(gameData.playerID);
@@ -10,6 +10,7 @@ const ctx = (gameData, npc) => {
 
 module.exports = {
   signature: "cedesRegionToPlayer",
+  games: ["wh3", "tk", "attila"],
   title: {
     en: "Cedes a Settlement to the Player",
     zh: "割让定居点给玩家"

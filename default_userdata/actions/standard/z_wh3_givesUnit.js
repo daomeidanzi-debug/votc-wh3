@@ -7,6 +7,7 @@ const armyOf = (c) => (c && c.wh3 && c.wh3.character.army) || null;
 
 module.exports = {
   signature: "givesUnitToPlayer",
+  games: ["wh3"],
   title: {
     en: "Gives a Unit to the Player",
     zh: "赠予玩家一支部队"

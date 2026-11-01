@@ -14,6 +14,11 @@ const DEFAULT_USERDATA_DIR = path.join(app.getAppPath(), 'default_userdata', 'pr
 const DEFAULT_MAIN_TEMPLATE_PATH = 'system/default.hbs';
 const DEFAULT_LETTER_TEMPLATE_PATH = 'system/letter.hbs';
 
+/** Compare templates regardless of line endings and surrounding whitespace. */
+function normalizeTemplate(text: string): string {
+  return text.split('\r\n').join('\n').trim();
+}
+
 export class PromptConfigManager {
   ensurePromptDirs(): void {
     [VOTC_PROMPTS_DIR, VOTC_PROMPTS_SYSTEM_DIR, VOTC_PROMPTS_CHARACTER_DIR, VOTC_PROMPTS_EXAMPLES_DIR, VOTC_PROMPTS_HELPERS_DIR]
@@ -56,7 +61,8 @@ export class PromptConfigManager {
     const walk = (dir: string) => {
       if (!fs.existsSync(dir)) return;
       for (const entry of fs.readdirSync(dir)) {
-        if (entry === '.gitkeep') continue;
+        // .gitkeep, and _previous: old shipped defaults kept only for comparison
+        if (entry === '.gitkeep' || entry === '_previous') continue;
         const full = path.join(dir, entry);
         const stat = fs.statSync(full);
         if (stat.isDirectory()) {
@@ -86,8 +92,66 @@ export class PromptConfigManager {
     return path.join(VOTC_PROMPTS_DIR, relativeOrAbsolute);
   }
 
+  /**
+   * Like resolvePath, but prefers a game-specific copy next to the file:
+   * `dir/<variant>/name` for the first variant that has one (see promptVariantsFor).
+   */
+  resolveForGame(relativeOrAbsolute: string, variants: string[]): string {
+    if (path.isAbsolute(relativeOrAbsolute)) return relativeOrAbsolute;
+    const dir = path.dirname(relativeOrAbsolute);
+    const base = path.basename(relativeOrAbsolute);
+    for (const v of variants) {
+      const candidate = path.join(VOTC_PROMPTS_DIR, dir, v, base);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    return path.join(VOTC_PROMPTS_DIR, relativeOrAbsolute);
+  }
+
+  /**
+   * The main template for a game. A template the user never edited (it equals one of the
+   * shipped defaults) is swapped for the game's own default, so switching games also
+   * switches the default prompt; an edited template is always kept.
+   */
+  mainTemplateForGame(stored: string | undefined, variants: string[]): string {
+    const shipped = this.shippedMainTemplates();
+    const template = stored || this.getDefaultMainTemplateContent();
+    const normalized = normalizeTemplate(template);
+    if (!shipped.some((t) => t === normalized)) return template;
+    for (const v of variants) {
+      const file = path.join(DEFAULT_USERDATA_DIR, 'system', v, 'default.hbs');
+      if (fs.existsSync(file)) return fs.readFileSync(file, 'utf-8');
+    }
+    return template;
+  }
+
+  private shippedMainTemplatesCache: string[] | null = null;
+
+  private shippedMainTemplates(): string[] {
+    if (this.shippedMainTemplatesCache) return this.shippedMainTemplatesCache;
+    const result: string[] = [];
+    const add = (file: string) => {
+      try {
+        if (fs.existsSync(file)) result.push(normalizeTemplate(fs.readFileSync(file, 'utf-8')));
+      } catch { /* ignore */ }
+    };
+    const systemDir = path.join(DEFAULT_USERDATA_DIR, 'system');
+    add(path.join(systemDir, 'default.hbs'));
+    try {
+      for (const entry of fs.readdirSync(systemDir, { withFileTypes: true })) {
+        if (entry.isDirectory()) add(path.join(systemDir, entry.name, 'default.hbs'));
+      }
+      // earlier versions of the defaults: a user who never edited them still gets the new one
+      const previous = path.join(systemDir, '_previous');
+      if (fs.existsSync(previous)) {
+        for (const name of fs.readdirSync(previous)) add(path.join(previous, name));
+      }
+    } catch { /* ignore */ }
+    this.shippedMainTemplatesCache = result;
+    return result;
+  }
+
   getDefaultMainTemplateContent(): string {
-    const fallback = 'You are a character in a Total War: WARHAMMER III campaign.';
+    const fallback = 'You are a character in a strategy game campaign.';
     try {
       this.ensurePromptDirs();
       const fullPath = path.join(VOTC_PROMPTS_DIR, DEFAULT_MAIN_TEMPLATE_PATH);

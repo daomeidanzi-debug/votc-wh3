@@ -1,5 +1,5 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
-// Warhammer III: trade agreement between the AI character's faction and the player's faction.
+// Total War (Warhammer III, Three Kingdoms): trade agreement between the AI character's faction and the player's faction.
 
 const ctx = (gameData, npc) => {
   const player = gameData.characters.get(gameData.playerID);
@@ -10,6 +10,7 @@ const ctx = (gameData, npc) => {
 
 module.exports = {
   signature: "signsTradeAgreement",
+  games: ["wh3", "tk", "attila"],
   title: {
     en: "Signs a Trade Agreement",
     zh: "签订贸易协定"

@@ -1,10 +1,13 @@
-# VOTC for Total War: WARHAMMER III（战锤3 AI 对话）
+# VOTC 多游戏版 / VOTC Multi（战锤3、三国、十字军之王3、钢铁雄心4、维多利亚3、欧陆风云5、群星 AI 对话）
 
 在《全面战争：战锤3》的战役里，和任何领主、英雄用 AI 自由对话——谈判、威胁、收买、结盟——而且谈成的事会**真的在游戏里发生**：付钱、议和、宣战、割让定居点、调拨部队……
 
 移植自十字军之王3的模组 [Voices of the Court](https://github.com/Voices-of-the-Court/VOTC)。
 
 *English summary: talk to any lord or hero in your Warhammer III campaign through an LLM; agreements are carried out in the game. See [English quick start](#english-quick-start) below.*
+
+> **程序已改名为 VOTC 多游戏版（VOTC Multi）**，同一个程序支持 7 个游戏：十字军之王3、战锤3、全面战争：三国、钢铁雄心4、维多利亚3、欧陆风云5、群星。在设置最上面选择游戏，安装和用法见 [docs/MULTI_GAME.md](docs/MULTI_GAME.md)。下面是战锤3的说明。
+> *The app is now **VOTC Multi**: one program for CK3, Warhammer III, Three Kingdoms, HOI4, Victoria 3, EU5 and Stellaris, see [docs/MULTI_GAME.md](docs/MULTI_GAME.md). The rest of this page covers Warhammer III.*
 
 ---
 

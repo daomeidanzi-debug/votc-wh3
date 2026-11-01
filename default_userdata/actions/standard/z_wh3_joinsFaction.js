@@ -1,5 +1,5 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
-// Warhammer III: the AI character's faction confederates into the player's faction.
+// Total War (Warhammer III, Three Kingdoms): the AI character's faction confederates into the player's faction.
 
 const ctx = (gameData, npc) => {
   const player = gameData.characters.get(gameData.playerID);
@@ -10,6 +10,7 @@ const ctx = (gameData, npc) => {
 
 module.exports = {
   signature: "joinsPlayerFaction",
+  games: ["wh3", "tk"],
   title: {
     en: "Confederates with the Player",
     zh: "并入玩家派系（邦联）"

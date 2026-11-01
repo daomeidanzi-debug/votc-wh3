@@ -1,0 +1,42 @@
+# VOTC Bridge (GPL-3.0, see LICENSE.txt): in-game buttons that open a VOTC conversation.
+# They only write log lines (see votc_scripted_effects.txt); nothing in the game changes.
+scripted_gui = {
+
+	# "Talk (VOTC)" in a country's diplomacy view: its leader, advisors and commanders
+	votc_talk_diplomacy = {
+		context_type = selected_country_context
+		window_name = "votc_talk_diplomacy_window"
+		parent_window_token = selected_country_view_diplomacy
+
+		visible = {
+			always = yes
+		}
+
+		effects = {
+			votc_talk_button_click = {
+				votc_talk_from_diplomacy = yes
+			}
+		}
+
+		ai_enabled = { always = no }
+	}
+
+	# "VOTC" under the top bar: the player's own people, or anyone in the app's list
+	votc_talk_top_bar = {
+		context_type = player_context
+		window_name = "votc_talk_top_bar_window"
+		parent_window_token = top_bar
+
+		visible = {
+			always = yes
+		}
+
+		effects = {
+			votc_top_button_click = {
+				votc_talk_from_top_bar = yes
+			}
+		}
+
+		ai_enabled = { always = no }
+	}
+}

@@ -1,0 +1,10 @@
+﻿l_english:
+ votc_opinion_great:0 "Memorable diplomacy"
+ votc_opinion_good:0 "Cordial talks"
+ votc_opinion_bad:0 "Sour talks"
+ votc_opinion_terrible:0 "Diplomatic insult"
+ votc_faction_name:0 "[ROOT.GetAdjective] Pact"
+ VOTC_TALK_BUTTON:0 "Talk (VOTC)"
+ VOTC_TALK_BUTTON_TT:0 "Talk with this country's leader, advisors or commanders in the VOTC app."
+ VOTC_TOP_BUTTON:0 "VOTC"
+ VOTC_TOP_BUTTON_TT:0 "Talk with your own people, or anyone the VOTC app knows."

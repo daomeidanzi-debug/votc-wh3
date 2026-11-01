@@ -1,0 +1,8 @@
+﻿l_simp_chinese:
+ votc_opinion_great:0 "难忘的外交"
+ votc_opinion_good:0 "友好会谈"
+ votc_opinion_bad:0 "不欢而散"
+ votc_opinion_terrible:0 "外交侮辱"
+ VOTC_WAR_NAME:0 "口舌之战"
+ decision_votc_open_communications:0 "开启通讯（VOTC）"
+ decision_votc_open_communications_desc:0 "在 VOTC 程序里与本国领袖或其他帝国的统治者对话。"

@@ -1,4 +1,4 @@
-// 《全面战争：战锤3》角色信息构建（中文）
+// 全面战争系列（战锤3、三国）角色信息构建（中文）
 // Exports a function (gameData, currentCharacterId?) => string
 
 /**@typedef {import('../../../gamedata_typedefs').GameData} GameData */
@@ -23,7 +23,10 @@ module.exports = (gameData, currentCharacterId) => {
         `场景（${sceneZh(gameData)}）`,
         gameData.location ? `地点（${gameData.location}${gameData.locationController ? `，归属${gameData.locationController}` : ""}）` : null,
     ].filter(Boolean);
-    output += `[背景：《全面战争：战锤3》战役；${scene.join("；")}]`;
+    if (gameData.wh3 && gameData.wh3.world && gameData.wh3.world.length) {
+        output += `[人人皆知的天下大势：${gameData.wh3.world.join(" | ")}]\n`;
+    }
+    output += `[背景：《${gameData.gameName}》战役（${gameData.gameSetting}）；${scene.join("；")}]`;
     if (info && !info.sameFaction) {
         output += `\n[${info.playerFaction.name}与${info.targetFaction.name}的外交关系：${describeRelation(info.targetFaction)}]`;
     }
@@ -104,6 +107,20 @@ function sceneZh(gameData) {
     return "战役地图上的会谈";
 }
 
+// 三国：游戏记录的家人和人际关系
+function familyItems(c) {
+    const items = [];
+    const fam = c.family || {};
+    if (fam.spouse) items.push(`配偶（${fam.spouse}）`);
+    if (fam.father) items.push(`父亲（${fam.father}）`);
+    if (fam.mother) items.push(`母亲（${fam.mother}）`);
+    if (fam.children && fam.children.length) items.push(`子女（${fam.children.join("，")}）`);
+    const byKind = {};
+    for (const r of c.relationships || []) (byKind[r.kind] = byKind[r.kind] || []).push(r.name);
+    for (const [kind, names] of Object.entries(byKind)) items.push(`${kind}（${names.join("，")}）`);
+    return items;
+}
+
 function buildCharacterItems(char, gameData) {
     const w = char.wh3;
     const items = [];
@@ -116,9 +133,16 @@ function buildCharacterItems(char, gameData) {
     const c = w.character;
     const f = w.faction;
     const isPlayer = char.id === gameData.playerID;
+    // 外派系的人只能从外面看玩家的派系：不知道国库和军队数量
+    const outsider = isPlayer && !(gameData.wh3 && gameData.wh3.sameFaction);
     items.push(`身份（${c.isFactionLeader ? `${f.name}的派系领袖` : `${f.name}的${TYPE_LABELS[c.typeKey] || c.typeKey}`}）`);
-    if (c.subtypeName) items.push(`类型（${c.subtypeName}）`);
-    items.push(`种族（${f.subcultureName || f.cultureName}）`);
+    if (c.subtypeName && !c.className) items.push(`类型（${c.subtypeName}）`);
+    // 三国：职业（五行）、官职和对主公的满意度
+    if (c.subtypeName && c.className) items.push(`职业（${c.subtypeName}）`);
+    if (c.postName) items.push(`官职（${c.postName}）`);
+    if (typeof c.satisfaction === "number" && !c.isFactionLeader) items.push(`对主公的满意度（${c.satisfaction}）`);
+    items.push(...familyItems(c));
+    if (f.subcultureName || f.cultureName) items.push(`种族（${f.subcultureName || f.cultureName}）`);
     if (VOICES[f.subcultureKey]) items.push(`说话风格（${VOICES[f.subcultureKey]}）`);
     if (c.isUnit) {
         items.push(`所属部队（${c.subtypeName}${typeof c.strength === "number" ? `，兵力 ${c.strength}%` : ""}）`);
@@ -138,13 +162,16 @@ function buildCharacterItems(char, gameData) {
         const units = c.army.units.map((u) => `${u.name}×${u.count}`).join("、");
         items.push(`军队（${c.army.unitCount} 个单位栏位${units ? `：${units}` : ""}${c.army.heroes.length ? `；随军英雄：${c.army.heroes.join("、")}` : ""}）`);
     }
-    items.push(`派系（${f.name}：${f.regionCount} 个定居点${f.capitalName ? `，首都${f.capitalName}` : ""}，${f.armyCount} 支军队，国库 ${Math.floor(f.treasury)} 金币）`);
+    items.push(outsider
+        ? `派系（${f.name}：${f.regionCount} 个定居点${f.capitalName ? `，首都${f.capitalName}` : ""}；外人不知道它的国库和军队数量）`
+        : `派系（${f.name}：${f.regionCount} 个定居点${f.capitalName ? `，首都${f.capitalName}` : ""}，${f.armyCount} 支军队，国库 ${Math.floor(f.treasury)} 金币）`);
     if (f.atWarWith && f.atWarWith.length) items.push(`派系正在交战（${f.atWarWith.map((x) => x.name).join("、")}）`);
     if (!isPlayer) {
         if (gameData.wh3 && gameData.wh3.sameFaction) {
             items.push("关系（效力于玩家自己的派系）");
         } else {
-            items.push(`对玩家派系的态度（${char.opinionOfPlayer}，${attitudeWord(char.opinionOfPlayer)}）`);
+            // 阿提拉的脚本读不到外交态度：不写，免得编出一个 0
+            if (typeof f.attitudeToPlayer === "number") items.push(`对玩家派系的态度（${char.opinionOfPlayer}，${attitudeWord(char.opinionOfPlayer)}）`);
         }
     } else {
         items.push("玩家本人");
@@ -168,6 +195,6 @@ function describeRelation(f) {
     if (f.isMasterOfPlayer) parts.push(`${f.name}是玩家的宗主`);
     if (f.tradingWithPlayer) parts.push("贸易伙伴");
     if (parts.length === 0) parts.push("无条约");
-    parts.push(`对玩家的态度：${f.attitudeToPlayer}（${attitudeWord(f.attitudeToPlayer)}）`);
+    if (typeof f.attitudeToPlayer === "number") parts.push(`对玩家的态度：${f.attitudeToPlayer}（${attitudeWord(f.attitudeToPlayer)}）`);
     return parts.join("，");
 }

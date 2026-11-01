@@ -8,9 +8,9 @@ import { ConversationEntry, Message, createError, createMessage, createActionFee
 import { PromptBuilder } from "./PromptBuilder";
 import { ActionEngine } from "../actions/ActionEngine";
 import { EventEmitter } from "events";
-import { wh3Bridge, Wh3BridgeError } from "../wh3/Wh3Bridge";
-import { buildGameDataFromWh3, describeExportError } from "../wh3/buildGameData";
-import { applyBackstories } from "../wh3/backstories";
+import { activeGame } from "../games";
+import { applyBackstories } from "../games/backstories";
+import { applyWorldMods } from "../games/mods";
 import { focusMonitor } from "../FocusMonitor";
 import { VOTC_BACKSTORIES_DIR } from "../utils/paths";
 import { shell } from "electron";
@@ -75,13 +75,15 @@ export class Conversation {
     /** Settles once the first attempt to load game data has finished (successfully or not). */
     ready: Promise<void>;
 
-    constructor() {
+    /** @param targetId partner picked in the app (Paradox games); the game picks otherwise */
+    constructor(private targetId?: string) {
         this.eventEmitter = new EventEmitter();
         this.ready = this.initializeGameData();
     }
 
     private async initializeGameData(): Promise<void> {
-        // Check the Warhammer III folder and bridge files
+        const game = activeGame();
+        // Check the game folder and bridge files
         const fileResult = await initializationService.ensureRequiredFiles();
 
         for (const warning of fileResult.warnings) {
@@ -96,8 +98,8 @@ export class Conversation {
                 console.error('Conversation.initializeGameData: Path error:', warning.message);
                 this.messages.push(createError({
                     id: this.nextId++,
-                    content: 'Warhammer III Folder Not Found',
-                    details: warning.suggestion || 'Please select the Total War: WARHAMMER III install folder in settings.'
+                    content: `${game.name.en} Folder Not Found`,
+                    details: warning.suggestion || `Please select the ${game.name.en} folder in settings.`
                 }));
             }
         }
@@ -109,24 +111,28 @@ export class Conversation {
         }
 
         try {
-            // Drop anything left over from a previous conversation before asking for fresh state
-            wh3Bridge.clear();
             const lang = settingsRepository.getLanguage();
-            // the game answers only while it is the foreground window; wait as long as it is not
-            const state = await wh3Bridge.requestExport(undefined, undefined, () => !focusMonitor.isGameFocused());
-            if (!state.ok) {
-                console.warn('Conversation.initializeGameData: export failed:', state.error);
+            // Total War answers only while it is the foreground window; wait as long as it is not
+            const result = await game.loadGameData({
+                lang,
+                gameInBackground: () => !focusMonitor.isGameFocused(),
+                targetId: this.targetId,
+            });
+            if (!result.ok) {
+                console.warn('Conversation.initializeGameData: could not load game data:', result.title, result.details);
                 this.isActive = false;
                 this.messages.push(createError({
                     id: this.nextId++,
-                    content: lang === 'zh' ? '无法开始对话' : 'Cannot start conversation',
-                    details: describeExportError(state.error, lang)
+                    content: result.title,
+                    details: result.details
                 }));
                 this.emitUpdate();
                 return;
             }
-            this.gameData = buildGameDataFromWh3(state, lang);
+            this.gameData = result.gameData;
             applyBackstories(this.gameData, VOTC_BACKSTORIES_DIR);
+            // total conversions (The New Order, Kaiserreich...) replace the setting
+            applyWorldMods(this.gameData);
             console.log('GameData initialized with', this.gameData.characters.size, 'characters');
             this.gameData.loadCharactersSummaries();
             
@@ -149,15 +155,13 @@ export class Conversation {
             this.isActive = true;
             this.emitUpdate();
         } catch (error) {
-            console.error('Failed to read game state from Warhammer III:', error);
+            console.error(`Failed to read game state from ${game.name.en}:`, error);
             this.isActive = false;
 
             // Add initialization error message to conversation
             const initError = createError({
                 id: this.nextId++,
-                content: error instanceof Wh3BridgeError && error.code === 'timeout'
-                    ? 'Warhammer III is not responding'
-                    : 'Failed to initialize conversation',
+                content: 'Failed to initialize conversation',
                 details: error instanceof Error ? error.message : String(error)
             });
             this.messages.push(initError);

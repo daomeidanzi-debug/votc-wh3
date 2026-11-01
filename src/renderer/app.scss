@@ -676,3 +676,85 @@ button {
       url('./assets/button.png');
   }
 }
+
+// Paradox games: conversation partner picker
+.talk-picker {
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.talk-picker-filter {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  box-sizing: border-box;
+}
+
+.talk-picker-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.talk-picker-group {
+  margin-top: 0.5rem;
+  padding: 0 0.2rem;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+
+.talk-picker-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+
+.talk-picker-name {
+  font-weight: bold;
+}
+
+.talk-picker-leader,
+.talk-picker-status {
+  opacity: 0.8;
+  font-size: 0.9em;
+}
+
+.talk-picker-status {
+  margin-left: auto;
+}
+
+// queued actions waiting for the game (applied automatically, or by "run votc.txt")
+.game-commands-pending {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background-color: rgba(30, 20, 10, 0.92);
+  color: #f3e3c3;
+  border: 1px solid #b08d57;
+  border-radius: 4px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.game-selector select {
+  width: 100%;
+  margin-bottom: 0.4rem;
+}
+
+.game-talk-hint {
+  font-size: 0.9em;
+  opacity: 0.8;
+  margin: 0 0 0.6rem;
+}

@@ -1,0 +1,23 @@
+# VOTC Bridge (GPL-3.0, see LICENSE.txt): the in-game button that opens a VOTC conversation.
+# Only writes log lines (see votc_scripted_effects.txt); costs nothing and changes nothing.
+decision_votc_open_communications = {
+	owned_planets_only = yes
+	icon = decision_resources
+
+	potential = {
+		is_capital = yes
+		owner = { is_ai = no }
+	}
+
+	allow = {
+		always = yes
+	}
+
+	effect = {
+		owner = { votc_talk_from_decision = yes }
+	}
+
+	ai_weight = {
+		weight = 0
+	}
+}

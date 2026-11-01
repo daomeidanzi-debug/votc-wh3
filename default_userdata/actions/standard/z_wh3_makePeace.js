@@ -1,5 +1,5 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
-// Warhammer III: the AI character's faction makes peace with the player's faction.
+// Total War (Warhammer III, Three Kingdoms): the AI character's faction makes peace with the player's faction.
 
 const ctx = (gameData, npc) => {
   const player = gameData.characters.get(gameData.playerID);
@@ -10,6 +10,7 @@ const ctx = (gameData, npc) => {
 
 module.exports = {
   signature: "makesPeaceWithPlayer",
+  games: ["wh3", "tk", "attila"],
   title: {
     en: "Makes Peace with the Player",
     zh: "与玩家议和"

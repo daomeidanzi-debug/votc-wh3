@@ -13,7 +13,7 @@ import type { ILLMCompletionResponse, ILLMMessage, ConnectionTestSubResult, LLMP
 import { settingsRepository } from "../SettingsRepository";
 import { resolveI18nString } from "./i18nUtils";
 import { ActionSandbox } from "./ActionSandbox";
-import { wh3Bridge } from "../wh3/Wh3Bridge";
+import { activeGame } from "../games";
 
 export interface ActionEvaluationResult {
   autoApproved: ActionExecutionResult[];
@@ -56,7 +56,7 @@ export class ActionEngine {
       
       // 1) Build candidate actions for this source character
       const loaded = actionRegistry.getAllActions(/* includeDisabled = */ false);
-      // Warhammer III: a rank-and-file soldier can talk but cannot act for a faction or character
+      // Total War: a rank-and-file soldier can talk but cannot act for a faction or character
       const npcIsUnit = !!npc.wh3?.character?.isUnit;
 
       const available: SchemaBuildInput["availableActions"] = [];
@@ -311,7 +311,7 @@ export class ActionEngine {
    */
   private static reportProblem(conv: Conversation, kind: string, detail: string): void {
     console.warn(`[ActionEngine] ${kind}: ${detail}`);
-    wh3Bridge.diagnostic(`actions ${kind}: ${detail}`);
+    activeGame().diagnostic(`actions ${kind}: ${detail}`);
     let seen = this.reported.get(conv);
     if (!seen) {
       seen = new Set();
@@ -358,7 +358,12 @@ export class ActionEngine {
       if (options?.dryRun) {
         return;
       }
-      ActionEffectWriter.writeEffect(command);
+      ActionEffectWriter.writeEffect(command, {
+        gameData: conv.gameData,
+        sourceCharacterId: npc.id,
+        targetCharacterId: targetId,
+        label: loaded.definition.title ? resolveI18nString(loaded.definition.title, userLang) : inv.actionId,
+      });
     };
 
     // Provide args as a plain object (name -> value); default to {}

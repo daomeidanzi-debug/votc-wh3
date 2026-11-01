@@ -3,7 +3,9 @@ import fs from "fs";
 import { Character } from "./Character";
 import { VOTC_SUMMARIES_DIR } from "../utils/paths";
 import type { LetterData } from "../letter/types";
-import type { Wh3Faction } from "../wh3/types";
+import type { Wh3Faction } from "../games/totalwar/types";
+import type { GameId } from "../games/types";
+import type { PdxGameInfo } from "../games/paradox/types";
 
 /** Per-campaign info stored next to the summaries; not a .json so it is never read as a summary file. */
 export const CAMPAIGN_INFO_FILE = "_campaign.meta";
@@ -22,7 +24,7 @@ function removeTooltip(text: string): string {
     return (text ?? '').replace(/<.*?>.*?<\/.*?>/gi, '').trim();
 }
 
-/** Warhammer III campaign context attached by the game bridge. */
+/** Total War campaign context attached by the game bridge (Warhammer III, Three Kingdoms, Attila). */
 export type Wh3GameInfo = {
     turn: number,
     campaign: string,
@@ -32,7 +34,11 @@ export type Wh3GameInfo = {
     playerFaction: Wh3Faction,
     /** the AI character's faction; equals playerFaction when talking to your own commander */
     targetFaction: Wh3Faction,
-    sameFaction: boolean
+    sameFaction: boolean,
+    /** the world situation everyone knows, one line per major faction (Three Kingdoms, Attila) */
+    world?: string[],
+    /** traits an action may grant, when the game (and its mods) define them at runtime (Attila) */
+    grantableTraits?: Array<{ key: string, name: string }>
 }
 
 /**@typedef {import('./Character').Character} Character */
@@ -250,7 +256,21 @@ export class GameData {
     characters: Map<number,Character>
     letterData: LetterData | null;
 
+    /** which game produced this data; CK3 data from parseLog leaves the default */
+    game: GameId = 'ck3';
+    /** e.g. "Hearts of Iron IV", used by prompts */
+    gameName = 'Crusader Kings III';
+    /** one-line description of the world, used by prompts */
+    gameSetting = 'the medieval world of Crusader Kings III';
+    /** the player's mods as they shape the world (total conversion, notable gameplay mods) */
+    worldMods?: { conversion?: { name: string; setting: string; alternate: boolean }; others: string[] };
+    /** mod names the game itself reported (games whose mod list is not readable from disk) */
+    reportedMods?: string[];
+
+    /** Total War campaign context (Warhammer III, Three Kingdoms) */
     wh3?: Wh3GameInfo;
+    /** Paradox (HOI4, Victoria 3, EU5, Stellaris) campaign context */
+    pdx?: PdxGameInfo;
 
     /** Game data with every field empty/zero, to be filled in by a game adapter. */
     static blank(): GameData {
@@ -290,7 +310,12 @@ export class GameData {
      * the player id is the fallback when the bridge provides none.
      */
     getSummariesKey(): string {
-        return this.wh3?.campaignId || this.playerID.toString();
+        return this.wh3?.campaignId || this.pdx?.campaignId || this.playerID.toString();
+    }
+
+    /** Campaign-scoped games reuse ids between campaigns: never mix summaries of different folders. */
+    private hasCampaignId(): boolean {
+        return !!(this.wh3?.campaignId || this.pdx?.campaignId);
     }
 
     private getSummariesPath(): string {
@@ -299,14 +324,17 @@ export class GameData {
 
     /** Record which campaign a summaries folder belongs to (shown in the summaries manager). */
     private writeCampaignInfo(summariesPath: string): void {
-        if (!this.wh3?.campaignId) return;
+        const info = this.wh3
+            ? { campaignId: this.wh3.campaignId, campaign: this.wh3.campaign, playerFaction: this.wh3.playerFaction.name, lastTurn: this.wh3.turn }
+            : this.pdx
+                ? { campaignId: this.pdx.campaignId, campaign: this.gameName, playerFaction: this.pdx.playerCountry.name, lastDate: this.date }
+                : null;
+        if (!info?.campaignId) return;
         try {
             fs.writeFileSync(path.join(summariesPath, CAMPAIGN_INFO_FILE), JSON.stringify({
-                campaignId: this.wh3.campaignId,
-                campaign: this.wh3.campaign,
+                ...info,
+                game: this.game,
                 playerName: this.playerName,
-                playerFaction: this.wh3.playerFaction.name,
-                lastTurn: this.wh3.turn,
             }, null, '\t'));
         } catch (error) {
             console.warn('Failed to write campaign info:', error);
@@ -362,7 +390,7 @@ export class GameData {
 
         // Other folders are other campaigns; a character id there is a different character
         // (ids are reused between campaigns), so never offer those summaries.
-        if (this.wh3?.campaignId) {
+        if (this.hasCampaignId()) {
             return results;
         }
 

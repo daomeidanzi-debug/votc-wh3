@@ -1,0 +1,35 @@
+# VOTC Bridge (GPL-3.0, see LICENSE.txt): "Talk (VOTC)" for every character, at home or abroad.
+# Logs the character and the countries involved; the VOTC app opens the conversation.
+# Changes nothing in the game. scope:actor = the player's country, scope:recipient = the character.
+
+votc_talk = {
+	on_own_nation = yes
+	on_other_nation = yes
+	message = no
+	show_message = no
+	show_message_to_target = no
+	ai_tick = never
+
+	potential = {
+		scope:actor = { is_ai = no }
+	}
+
+	select_trigger = {
+		looking_for_a = character
+		target_flag = recipient
+		name = "choose_character"
+		column = {
+			data = name
+		}
+		visible = {
+			is_alive = yes
+		}
+	}
+
+	effect = {
+		scope:recipient = { votc_talk_to_character = yes }
+	}
+
+	ai_will_do = {
+	}
+}

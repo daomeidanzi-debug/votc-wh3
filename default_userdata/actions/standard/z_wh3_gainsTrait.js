@@ -18,6 +18,7 @@ const TRAITS = {
 
 module.exports = {
   signature: "gainsTrait",
+  games: ["wh3"],
   title: {
     en: "Gains a Trait",
     zh: "获得特质"

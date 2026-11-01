@@ -274,7 +274,8 @@
     "promptLocaleSwitchedHint": "标记为回退的项目没有您语言的翻译，因此使用了英语版本。",
     "promptLocaleSwitchedRevert": "全部还原",
     "promptLocaleSwitchedTitle": "提示词文件已更新",
-    "selectPromptGroup": "选择提示词"
+    "selectPromptGroup": "选择提示词",
+    "perGameHint": "这些提示词属于「{{game}}」。每个游戏有自己的一套，切换游戏时会一起切换。"
   },
   "settings": {
     "actionApprovalHelp": "配置哪些操作在执行前需要用户批准。危险操作（如杀死角色）在选中相应设置时始终需要批准。",
@@ -283,7 +284,7 @@
     "approvalModeAll": "自动接受所有操作（无需批准）",
     "approvalModeNonDestructive": "自动接受安全操作（仅危险操作需要批准）",
     "approvalModeNone": "不自动接受（所有操作都需要批准）",
-    "ck3UserFolder": "战锤3 游戏文件夹",
+    "ck3UserFolder": "游戏文件夹",
     "currentPath": "当前路径",
     "enableStreamingGlobally": "全局启用流式输出",
     "generateFollowingMessages": "生成后续消息",
@@ -299,14 +300,17 @@
     "showSettingsOnStartup": "启动时显示设置",
     "viewLettersStatus": "查看信件状态",
     "votcModLocation": "VOTC 模组位置",
-    "ck3UserFolderHelp": "点击下方字段，选择《全面战争：战锤3》的安装文件夹（包含 Warhammer3.exe 的那个）。\nVOTC 通过这个文件夹里的文件和 votc_wh3 模组交换数据。",
+    "ck3UserFolderHelp": "点击下方字段，选择上面所选游戏的文件夹：全面战争系列选安装目录，Paradox 游戏选 文档\\Paradox Interactive\\<游戏名>。\nVOTC 通过这个文件夹里的文件和游戏里的 VOTC 模组交换数据。",
     "ck3UserFolderExample": "用户名",
-    "selectedCK3FolderTitle": "已选择的战锤3 文件夹",
-    "selectCK3UserFolderTitle": "选择战锤3 安装文件夹",
+    "selectedCK3FolderTitle": "已选择的游戏文件夹",
+    "selectCK3UserFolderTitle": "选择游戏文件夹",
     "allowPrerelease": "接收测试版更新",
     "allowPrereleaseHelp": "启用后，您将收到测试版和预发布版本。这些版本可能不太稳定，但包含最新功能。",
     "egline": "如：",
-    "ck3UserFolderClickToSelect": "点击以选择"
+    "ck3UserFolderClickToSelect": "点击以选择",
+    "gameTitle": "游戏",
+    "gameFolderInstallHelp": "游戏安装目录（包含游戏 .exe 的文件夹），桥接文件会写在这里。",
+    "gameFolderDocumentsHelp": "文档\\Paradox Interactive 下的游戏文件夹（包含 logs、mod 和 save games）。"
   },
   "summaries": {
     "aboutSummaryGeneration": "关于摘要生成",
@@ -376,5 +380,18 @@
     "summariesManager": "摘要管理器",
     "summariesManagerHelp": "查看、编辑和管理所有角色的对话摘要。摘要按玩家角色分组。",
     "summaryIndex": "摘要索引"
+  },
+  "talkPicker": {
+    "title": "你想和谁对话？",
+    "empty": "还没有收到游戏数据。请启用 VOTC 模组并载入存档，让游戏至少过一个月（或在游戏里点“交谈”），然后再试。",
+    "filter": "搜索名字、头衔或国家",
+    "cancel": "取消",
+    "groupOwn": "本国人物",
+    "groupLeaders": "各国领袖",
+    "groupPeople": "其他人物"
+  },
+  "commandsPending": {
+    "auto": "{{count}} 个谈妥的动作会在你回到游戏后自动执行。",
+    "manual": "有 {{count}} 个动作待执行：打开游戏控制台输入 {{command}}（已复制到剪贴板）。"
   }
 }

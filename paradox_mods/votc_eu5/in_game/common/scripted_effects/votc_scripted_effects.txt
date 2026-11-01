@@ -1,0 +1,245 @@
+# VOTC Bridge for Europa Universalis V (GPL-3.0, see LICENSE.txt).
+# Line format: see src/main/games/paradox/types.ts in the VOTC source.
+# The player's country is saved as scope:votc_player, so these effects also work where
+# root is something else (character interactions).
+
+votc_ensure_campaign_id = {
+	if = {
+		limit = { NOT = { has_global_variable = votc_campaign } }
+		set_global_variable = {
+			name = votc_campaign
+			value = { integer_range = { min = 100000 max = 999999 } }
+		}
+	}
+	if = {
+		limit = { NOT = { has_global_variable = votc_seq } }
+		set_global_variable = { name = votc_seq value = 0 }
+	}
+}
+
+# THIS = the player's country. A whole snapshot (monthly, refresh command).
+votc_snapshot = {
+	votc_snapshot_open = { REASON = $REASON$ }
+	votc_snapshot_close = yes
+}
+
+# THIS = the player's country: BEGIN, campaign data, the player and the countries that matter.
+# Callers may log more (characters, a talk request) before votc_snapshot_close.
+votc_snapshot_open = {
+	votc_ensure_campaign_id = yes
+	save_scope_as = votc_player
+	save_scope_as = votc_p
+	debug_log = "VOTC|BEGIN|eu5|2|$REASON$"
+	debug_log = "VOTC|META|campaign|[GetGlobalVariable('votc_campaign').GetValue|0]"
+	debug_log = "VOTC|META|seq|[GetGlobalVariable('votc_seq').GetValue|0]"
+	debug_log = "VOTC|META|date|[GetDateString]"
+	debug_log = "VOTC|P|tag|[SCOPE.sCountry('votc_p').GetTag]"
+	debug_log = "VOTC|P|name|[SCOPE.sCountry('votc_p').GetName]"
+	debug_log = "VOTC|P|leader|[SCOPE.sCountry('votc_p').GetGovernment.GetRuler.GetName]"
+	debug_log = "VOTC|P|leader_title|[SCOPE.sCountry('votc_p').GetGovernment.GetRulerTitle]"
+	debug_log = "VOTC|P|capital|[SCOPE.sCountry('votc_p').GetCapital.GetName]"
+	if = {
+		limit = { is_great_power = yes }
+		debug_log = "VOTC|P|great_power|yes"
+	}
+	# the player's wars and alliances are public knowledge
+	every_country = {
+		limit = { is_at_war_with = scope:votc_player }
+		save_scope_as = votc_o
+		debug_log = "VOTC|P|war_with|[SCOPE.sCountry('votc_o').GetName]"
+	}
+	every_country = {
+		limit = { is_allied_with = scope:votc_player }
+		save_scope_as = votc_o
+		debug_log = "VOTC|P|allies|[SCOPE.sCountry('votc_o').GetName]"
+	}
+	every_country = {
+		limit = { votc_is_relevant_country = yes }
+		votc_log_country = yes
+	}
+}
+
+votc_snapshot_close = {
+	debug_log = "VOTC|END"
+}
+
+# THIS = the country, scope:votc_player = the player's country
+votc_log_country = {
+	save_scope_as = votc_c
+	debug_log = "VOTC|C|[SCOPE.sCountry('votc_c').GetTag]|name|[SCOPE.sCountry('votc_c').GetName]"
+	debug_log = "VOTC|C|[SCOPE.sCountry('votc_c').GetTag]|leader|[SCOPE.sCountry('votc_c').GetGovernment.GetRuler.GetName]"
+	debug_log = "VOTC|C|[SCOPE.sCountry('votc_c').GetTag]|leader_title|[SCOPE.sCountry('votc_c').GetGovernment.GetRulerTitle]"
+	debug_log = "VOTC|C|[SCOPE.sCountry('votc_c').GetTag]|capital|[SCOPE.sCountry('votc_c').GetCapital.GetName]"
+	if = {
+		limit = { is_great_power = yes }
+		debug_log = "VOTC|C|[SCOPE.sCountry('votc_c').GetTag]|great_power|yes"
+	}
+	# its wars and alliances with anyone (the world situation)
+	every_country = {
+		limit = { is_at_war_with = scope:votc_c }
+		save_scope_as = votc_o
+		debug_log = "VOTC|C|[SCOPE.sCountry('votc_c').GetTag]|war_with|[SCOPE.sCountry('votc_o').GetName]"
+	}
+	every_country = {
+		limit = { is_allied_with = scope:votc_c }
+		save_scope_as = votc_o
+		debug_log = "VOTC|C|[SCOPE.sCountry('votc_c').GetTag]|allies|[SCOPE.sCountry('votc_o').GetName]"
+	}
+	if = {
+		limit = { is_at_war_with = scope:votc_player }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|war|yes"
+	}
+	if = {
+		limit = { is_allied_with = scope:votc_player }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|ally|yes"
+	}
+	if = {
+		limit = { OR = { is_rival_of = scope:votc_player scope:votc_player = { is_rival_of = prev } } }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|rival|yes"
+	}
+	if = {
+		limit = { is_subject_of = scope:votc_player }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|subject|yes"
+	}
+	if = {
+		limit = { scope:votc_player = { is_subject_of = prev } }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|overlord|yes"
+	}
+	if = {
+		limit = { has_truce_with = scope:votc_player }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|truce|yes"
+	}
+	# opinion of the player, in steps
+	if = {
+		limit = { opinion = { target = scope:votc_player value >= 100 } }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|opinion|80"
+	}
+	else_if = {
+		limit = { opinion = { target = scope:votc_player value >= 30 } }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|opinion|40"
+	}
+	else_if = {
+		limit = { opinion = { target = scope:votc_player value >= 0 } }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|opinion|10"
+	}
+	else_if = {
+		limit = { opinion = { target = scope:votc_player value >= -30 } }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|opinion|-15"
+	}
+	else_if = {
+		limit = { opinion = { target = scope:votc_player value >= -100 } }
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|opinion|-50"
+	}
+	else = {
+		debug_log = "VOTC|R|[SCOPE.sCountry('votc_c').GetTag]|opinion|-80"
+	}
+}
+
+# THIS = the character the player chose "Talk (VOTC)" on, scope:actor = the player's country
+votc_talk_to_character = {
+	save_scope_as = votc_talker
+	# the app's character commands (gain a trait, death...) act on this character
+	set_global_variable = { name = votc_talker value = this }
+	if = {
+		limit = { exists = owner }
+		owner = { save_scope_as = votc_talker_country }
+	}
+	scope:actor = { votc_snapshot_open = { REASON = talk } }
+	debug_log = "VOTC|META|talk|character"
+	debug_log = "VOTC|META|talk_tag|[SCOPE.sCountry('votc_talker_country').GetTag]"
+	debug_log = "VOTC|META|talk_name|[SCOPE.sCharacter('votc_talker').GetName]"
+	votc_log_character = yes
+	# the character's country, when the monthly list does not have it
+	if = {
+		limit = {
+			exists = owner
+			NOT = { owner = scope:votc_player }
+		}
+		owner = {
+			if = {
+				limit = { NOT = { votc_is_relevant_country = yes } }
+				votc_log_country = yes
+			}
+		}
+	}
+	scope:actor = { votc_snapshot_close = yes }
+}
+
+# THIS = scope:votc_talker, its country saved as scope:votc_talker_country
+votc_log_character = {
+	debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|title|[SCOPE.sCharacter('votc_talker').GetRoleName]"
+	debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|age|[SCOPE.sCharacter('votc_talker').GetAgeInYears]"
+	debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|culture|[SCOPE.sCharacter('votc_talker').GetCulture.GetName]"
+	debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|religion|[SCOPE.sCharacter('votc_talker').GetReligion.GetName]"
+	debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|nickname|[SCOPE.sCharacter('votc_talker').GetNickname]"
+	debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|location|[SCOPE.sCharacter('votc_talker').GetLocation.GetName]"
+	if = {
+		limit = { is_female = yes }
+		debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|gender|female"
+	}
+	else = {
+		debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|gender|male"
+	}
+	if = {
+		limit = { is_ruler = yes }
+		debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|ruler|yes"
+	}
+	if = {
+		limit = { is_heir = yes }
+		debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|status|heir"
+	}
+	votc_log_character_abilities = yes
+	votc_log_character_traits = yes
+	votc_log_character_family = yes
+}
+
+# the family of scope:votc_talker: parents, spouses, children
+votc_log_character_family = {
+	scope:votc_talker = {
+		father ?= {
+			save_scope_as = votc_rel
+			debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|father|[SCOPE.sCharacter('votc_rel').GetName]"
+		}
+		mother ?= {
+			save_scope_as = votc_rel
+			debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|mother|[SCOPE.sCharacter('votc_rel').GetName]"
+		}
+		every_spouse = {
+			save_scope_as = votc_rel
+			debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|spouse|[SCOPE.sCharacter('votc_rel').GetName]"
+		}
+		every_child = {
+			save_scope_as = votc_rel
+			debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|children|[SCOPE.sCharacter('votc_rel').GetName]"
+		}
+	}
+}
+
+# administrative / diplomatic / military ability, in steps of the 0-100 scale
+votc_log_character_abilities = {
+	votc_log_ability = { A = adm }
+	votc_log_ability = { A = dip }
+	votc_log_ability = { A = mil }
+}
+
+votc_log_ability = {
+	if = {
+		limit = { $A$ >= 80 }
+		debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|$A$_ability|80+ (excellent)"
+	}
+	else_if = {
+		limit = { $A$ >= 60 }
+		debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|$A$_ability|60-79 (good)"
+	}
+	else_if = {
+		limit = { $A$ >= 40 }
+		debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|$A$_ability|40-59 (average)"
+	}
+	else_if = {
+		limit = { $A$ >= 20 }
+		debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|$A$_ability|20-39 (poor)"
+	}
+	else = {
+		debug_log = "VOTC|CH|[SCOPE.sCountry('votc_talker_country').GetTag]|[SCOPE.sCharacter('votc_talker').GetName]|$A$_ability|under 20 (terrible)"
+	}
+}

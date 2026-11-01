@@ -70,6 +70,13 @@ const PromptsView: React.FC = () => {
   // excuded as reasonably dynamic blocks.
   const PREFIX_TYPES: string[] = ['main', 'description', 'examples', 'memories', 'past_summaries'];
   const [promptSettingsVersion, setPromptSettingsVersion] = useState<number>(0);
+  const [gameNames, setGameNames] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    window.gameAPI?.listGames()
+      .then((games) => setGameNames(Object.fromEntries(games.map((g) => [g.id, g.name]))))
+      .catch(() => { /* the hint falls back to the id */ });
+  }, [appSettings?.language]);
 
   useEffect(() => {
     loadPromptSettings();
@@ -203,7 +210,8 @@ const PromptsView: React.FC = () => {
   };
 
   const handleApplyPreset = (preset: PromptPreset) => {
-    persist({ ...preset.settings }, true);
+    // a preset saved in another game applies to the game shown here
+    persist({ ...preset.settings, game: localSettings?.game }, true);
     setSelectedPresetId(preset.id);
     setPresetName(preset.name || '');
   };
@@ -559,6 +567,12 @@ const PromptsView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {mode === 'conversation' && localSettings.game && (
+        <p className="game-talk-hint">
+          {t('prompts.perGameHint', { game: gameNames[localSettings.game] ?? localSettings.game, defaultValue: 'These prompts belong to {{game}}. Every game keeps its own; switching games switches them.' })}
+        </p>
+      )}
 
       <div className="main-prompt-card">
         <div className="card-header">

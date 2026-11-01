@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="5b0e7c3a-6f1d-4d8e-9c2a-70c7a1b4e6d1" version="1">
+	<Properties>
+		<Name>VOTC Bridge - Civilization VI</Name>
+		<Teaser>Talk with leaders, governors and great people in the VOTC app.</Teaser>
+		<Description>Lets the VOTC app read your civilization, the civilizations you have met and your people, so you can talk with them. Agreed actions are applied by the app through FireTuner (EnableTuner 1 in AppOptions.txt). GPL-3.0, unofficial fan project, not affiliated with Firaxis Games or 2K.</Description>
+		<Authors>VOTC contributors</Authors>
+		<EnabledByDefault>1</EnabledByDefault>
+		<AffectsSavedGames>0</AffectsSavedGames>
+		<CompatibleVersions>2.0</CompatibleVersions>
+	</Properties>
+	<InGameActions>
+		<AddUserInterfaces id="VOTC_Bridge_UI">
+			<Properties>
+				<Context>InGame</Context>
+			</Properties>
+			<File>VOTC_Bridge.xml</File>
+		</AddUserInterfaces>
+	</InGameActions>
+	<Files>
+		<File>VOTC_Bridge.xml</File>
+		<File>VOTC_Bridge.lua</File>
+		<File>LICENSE.txt</File>
+	</Files>
+</Mod>

@@ -9,6 +9,7 @@ import {
   ActionInvocation,
 } from "./types";
 import { VOTC_ACTIONS_DIR, VOTC_DATA_DIR } from "../utils/paths";
+import { settingsRepository } from "../SettingsRepository";
 import {
   ActionSettings,
   ActionValidationStatus,
@@ -71,7 +72,13 @@ export class ActionRegistry extends EventEmitter {
 
   public getAllActions(includeDisabled = false): LoadedAction[] {
     const disabled = new Set(this.settings.disabledActions);
+    const game = settingsRepository.getActiveGame();
     return Array.from(this.actions.values()).filter((action) => {
+      // actions written for another game would send commands this game cannot run
+      const games = action.definition?.games;
+      if (Array.isArray(games) && games.length > 0 && !games.includes(game)) {
+        return false;
+      }
       if (includeDisabled) {
         return true;
       }

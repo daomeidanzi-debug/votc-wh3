@@ -49,6 +49,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 });
 
+contextBridge.exposeInMainWorld('gameAPI', {
+  listGames: (): Promise<Array<{ id: string; name: string; folderKind: string; folderExample: string; talkHint: string }>> =>
+    ipcRenderer.invoke('game:list'),
+  getActiveGame: (): Promise<{ id: string; folder: string | null }> => ipcRenderer.invoke('game:getActive'),
+  setActiveGame: (id: string): Promise<{ id: string; folder: string | null; warnings: Array<{ type: string; message: string; suggestion?: string }> }> =>
+    ipcRenderer.invoke('game:setActive', id),
+  listTalkTargets: (tag?: string): Promise<Array<{ id: string; name: string; leader: string; leaderTitle: string; status: string; group?: 'own' | 'leaders' | 'people' }>> =>
+    ipcRenderer.invoke('talk:listTargets', tag),
+  startTalk: (targetId: string): Promise<void> => ipcRenderer.invoke('talk:start', targetId),
+  onTalkPick: (callback: (targets: Array<{ id: string; name: string; leader: string; leaderTitle: string; status: string; group?: 'own' | 'leaders' | 'people' }>) => void) => {
+    const handler = (_event: any, targets: any[]) => callback(targets);
+    ipcRenderer.on('talk-pick', handler);
+    return () => ipcRenderer.removeListener('talk-pick', handler);
+  },
+  onCommandsPending: (callback: (info: { count: number; runCommand: string; auto?: boolean }) => void) => {
+    const handler = (_event: any, info: { count: number; runCommand: string; auto?: boolean }) => callback(info);
+    ipcRenderer.on('game-commands-pending', handler);
+    return () => ipcRenderer.removeListener('game-commands-pending', handler);
+  },
+});
+
 contextBridge.exposeInMainWorld('llmConfigAPI', {
   getAppSettings: (): Promise<AppSettings> => ipcRenderer.invoke('llm:getAppSettings'),
   saveProviderConfig: (config: LLMProviderConfig): Promise<LLMProviderConfig> => ipcRenderer.invoke('llm:saveProviderConfig', config),
@@ -63,7 +84,7 @@ contextBridge.exposeInMainWorld('llmConfigAPI', {
   },
   cancelTestConnection: (): Promise<boolean> => ipcRenderer.invoke('llm:cancelTestConnection'),
   checkPlayer2Health: (): Promise<{success: boolean, client_version?: string, error?: string, message?: string, code?: number}> => ipcRenderer.invoke('llm:checkPlayer2Health'),
-  setCK3Folder: (path: string | null): Promise<void> => ipcRenderer.invoke('llm:setCK3Folder', path),
+  setCK3Folder: (path: string | null): Promise<string | null | undefined> => ipcRenderer.invoke('llm:setCK3Folder', path),
   setModLocationPath: (path: string | null): Promise<void> => ipcRenderer.invoke('llm:setModLocationPath', path),
   selectFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectFolder'),
   saveGlobalStreamSetting: (enabled: boolean): Promise<void> => ipcRenderer.invoke('llm:saveGlobalStreamSetting', enabled),

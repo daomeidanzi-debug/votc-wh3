@@ -1,0 +1,45 @@
+﻿# VOTC Bridge (GPL-3.0, see LICENSE.txt): "Talk (VOTC)" in a foreign country's diplomacy
+# menu. Victoria 3 only lists character interactions for your own characters and exiles, so
+# foreign people are reached through their country: this logs the country and all its
+# characters, and the VOTC app opens a list of them. Changes nothing in the game.
+#
+# root = the player's country, scope:target_country = the other country
+
+votc_talk_country = {
+	groups = {
+		general
+	}
+
+	requires_approval = no
+	show_confirmation_box = no
+	can_use_obligations = no
+
+	potential = {
+		is_player = yes
+		scope:target_country = {
+			NOT = { is_country_type = decentralized }
+		}
+	}
+
+	possible = {
+		always = yes
+	}
+
+	accept_effect = {
+		votc_talk_to_country = yes
+	}
+
+	ai = {
+		evaluation_chance = {
+			value = 0
+		}
+
+		propose_score = {
+			value = 0
+		}
+
+		will_propose = {
+			always = no
+		}
+	}
+}

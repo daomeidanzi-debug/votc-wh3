@@ -37,10 +37,11 @@ export class ConversationManager {
     /**
      * Create a new conversation with an NPC
      */
-    createConversation(): Conversation | null {
+    /** @param targetId partner picked in the app (Paradox games) */
+    createConversation(targetId?: string): Conversation | null {
         try {
             this.endCurrentConversation();
-            this.currentConversation = new Conversation();
+            this.currentConversation = new Conversation(targetId);
             this.setupConversationListeners();
             return this.currentConversation;
         } catch (error) {
@@ -69,7 +70,7 @@ export class ConversationManager {
             throw new Error('No active conversation');
         }
 
-        // game data arrives asynchronously from Warhammer III
+        // game data arrives asynchronously from the game bridge
         await this.currentConversation.ready;
 
         if (!this.currentConversation.isActive) {

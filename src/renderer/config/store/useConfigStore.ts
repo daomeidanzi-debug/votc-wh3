@@ -638,10 +638,16 @@ export const useConfigStore = create<ConfigStore>()(
       },
 
       updateCK3Folder: async (path) => {
-        await window.llmConfigAPI.setCK3Folder(path);
+        // the main process may correct the folder (e.g. a subfolder was picked)
+        const stored = await window.llmConfigAPI.setCK3Folder(path);
+        const folder = stored ?? path;
         set((state) => ({
           appSettings: state.appSettings
-            ? { ...state.appSettings, ck3UserFolderPath: path }
+            ? {
+                ...state.appSettings,
+                ck3UserFolderPath: folder,
+                gameFolders: { ...(state.appSettings.gameFolders ?? {}), [state.appSettings.activeGame ?? 'ck3']: folder },
+              }
             : null,
         }));
       },

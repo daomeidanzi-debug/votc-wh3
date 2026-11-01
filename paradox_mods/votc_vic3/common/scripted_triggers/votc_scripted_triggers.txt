@@ -1,0 +1,14 @@
+# THIS = a country, scope:votc_player = the player's country
+votc_is_relevant_country = {
+	exists = this
+	NOT = { this = scope:votc_player }
+	OR = {
+		country_rank >= rank_value:great_power
+		has_war_with = scope:votc_player
+		is_subject_of = scope:votc_player
+		scope:votc_player = { is_subject_of = prev }
+		has_diplomatic_pact = { who = scope:votc_player type = rivalry }
+		scope:votc_player = { relations:prev >= relations_threshold:amicable }
+		scope:votc_player = { relations:prev <= relations_threshold:cold }
+	}
+}

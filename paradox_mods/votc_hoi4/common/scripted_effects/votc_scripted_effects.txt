@@ -1,0 +1,248 @@
+# VOTC Bridge for Hearts of Iron IV (GPL-3.0, see LICENSE.txt).
+# Line format: see src/main/games/paradox/types.ts in the VOTC source.
+# Unless noted, every effect here runs in the scope of the player's country.
+
+# console refresh (the app queues `<TAG> = { votc_snapshot_refresh = yes }`)
+votc_snapshot_refresh = {
+	votc_snapshot = yes
+}
+
+votc_snapshot = {
+	votc_snapshot_head = yes
+	log = "VOTC|END"
+}
+
+# BEGIN, campaign data, the player and the countries that matter; callers add more lines
+# (characters, a talk request) and the END line.
+votc_snapshot_head = {
+	if = {
+		limit = { NOT = { has_variable = global.votc_campaign } }
+		set_temp_variable_to_random = { var = votc_r min = 100000 max = 999999 integer = yes }
+		set_variable = { global.votc_campaign = votc_r }
+	}
+	log = "VOTC|BEGIN|hoi4|2|snapshot"
+	log = "VOTC|META|campaign|[?global.votc_campaign|0]"
+	log = "VOTC|META|seq|[?global.votc_seq|0]"
+	log = "VOTC|META|date|[GetDateText]"
+	log = "VOTC|P|tag|[This.GetTag]"
+	log = "VOTC|P|name|[This.GetName]"
+	log = "VOTC|P|leader|[This.GetLeader]"
+	log = "VOTC|P|government|[This.GetRulingIdeologyNoun]"
+	log = "VOTC|P|capital|[This.Capital.GetName]"
+	log = "VOTC|P|party|[This.GetRulingParty]"
+	# the player's wars are public knowledge
+	every_enemy_country = {
+		log = "VOTC|P|war_with|[This.GetName]"
+	}
+	votc_log_player_stats = yes
+	every_country = {
+		limit = { votc_is_relevant_country = yes }
+		votc_log_country = yes
+	}
+}
+
+# The "Talk (VOTC)" button of the diplomacy view. The scripted GUI runs it either in the
+# selected country (with the player in FROM) or in the player (with the selected country
+# in FROM); both are handled.
+votc_talk_from_diplomacy = {
+	if = {
+		limit = { is_ai = no }
+		FROM = { save_event_target_as = votc_talk_target }
+	}
+	else = {
+		save_event_target_as = votc_talk_target
+	}
+	every_country = {
+		limit = { is_ai = no }
+		votc_snapshot_talk_country = yes
+	}
+}
+
+# THIS = the player: the snapshot, plus the people of the country picked in the diplomacy view
+votc_snapshot_talk_country = {
+	votc_snapshot_head = yes
+	log = "VOTC|META|talk|country"
+	event_target:votc_talk_target = {
+		log = "VOTC|META|talk_tag|[This.GetTag]"
+		if = {
+			limit = {
+				NOT = { tag = PREV }
+				NOT = { votc_is_relevant_country = yes }
+			}
+			votc_log_country = yes
+		}
+		votc_log_country_characters = yes
+	}
+	log = "VOTC|END"
+}
+
+# The "VOTC" button of the top bar. THIS = the player: the snapshot and the player's own people.
+votc_talk_from_top_bar = {
+	votc_snapshot_head = yes
+	log = "VOTC|META|talk|pick"
+	votc_log_country_characters = yes
+	log = "VOTC|END"
+}
+
+# THIS = a country: its leader, hired advisors and army / navy leaders
+votc_log_country_characters = {
+	every_character = {
+		limit = {
+			OR = {
+				is_country_leader = yes
+				is_hired_as_advisor = yes
+				is_unit_leader = yes
+			}
+		}
+		votc_log_character = yes
+	}
+}
+
+# THIS = a character
+votc_log_character = {
+	log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|ideology|[This.GetIdeology]"
+	if = {
+		limit = { is_country_leader = yes }
+		log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|ruler|yes"
+		log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|title|Head of State"
+	}
+	else_if = {
+		limit = { is_field_marshal = yes }
+		log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|title|Field Marshal"
+	}
+	else_if = {
+		limit = { is_corps_commander = yes }
+		log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|title|General"
+	}
+	else_if = {
+		limit = { is_navy_leader = yes }
+		log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|title|Admiral"
+	}
+	else_if = {
+		limit = { is_hired_as_advisor = yes }
+		log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|title|Advisor"
+	}
+	if = {
+		limit = { is_female = yes }
+		log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|gender|female"
+	}
+	else = {
+		log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|gender|male"
+	}
+	if = {
+		limit = { is_unit_leader = yes }
+		if = {
+			limit = { skill > 4 }
+			log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|command_skill|5+ (outstanding)"
+		}
+		else_if = {
+			limit = { skill > 2 }
+			log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|command_skill|3-4 (capable)"
+		}
+		else = {
+			log = "VOTC|CH|[This.Owner.GetTag]|[This.GetName]|command_skill|1-2 (green)"
+		}
+	}
+}
+
+votc_log_player_stats = {
+	set_temp_variable = { votc_v = stability }
+	multiply_temp_variable = { votc_v = 100 }
+	log = "VOTC|P|stability|[?votc_v|0]"
+	set_temp_variable = { votc_v = war_support }
+	multiply_temp_variable = { votc_v = 100 }
+	log = "VOTC|P|war_support|[?votc_v|0]"
+	set_temp_variable = { votc_v = political_power }
+	log = "VOTC|P|political_power|[?votc_v|0]"
+	set_temp_variable = { votc_v = num_divisions }
+	log = "VOTC|P|divisions|[?votc_v|0]"
+	set_temp_variable = { votc_v = num_of_civilian_factories }
+	log = "VOTC|P|factories_civ|[?votc_v|0]"
+	set_temp_variable = { votc_v = num_of_military_factories }
+	log = "VOTC|P|factories_mil|[?votc_v|0]"
+	set_temp_variable = { votc_v = manpower_k }
+	log = "VOTC|P|manpower_k|[?votc_v|0]"
+	if = {
+		limit = { is_in_faction = yes }
+		log = "VOTC|P|faction|[This.GetFactionName]"
+	}
+}
+
+# THIS = the country, PREV = the player's country
+votc_log_country = {
+	log = "VOTC|C|[This.GetTag]|name|[This.GetName]"
+	log = "VOTC|C|[This.GetTag]|leader|[This.GetLeader]"
+	log = "VOTC|C|[This.GetTag]|government|[This.GetRulingIdeologyNoun]"
+	log = "VOTC|C|[This.GetTag]|capital|[This.Capital.GetName]"
+	log = "VOTC|C|[This.GetTag]|party|[This.GetRulingParty]"
+	set_temp_variable = { votc_v = stability }
+	multiply_temp_variable = { votc_v = 100 }
+	log = "VOTC|C|[This.GetTag]|stability|[?votc_v|0]"
+	set_temp_variable = { votc_v = war_support }
+	multiply_temp_variable = { votc_v = 100 }
+	log = "VOTC|C|[This.GetTag]|war_support|[?votc_v|0]"
+	set_temp_variable = { votc_v = num_divisions }
+	log = "VOTC|C|[This.GetTag]|divisions|[?votc_v|0]"
+	set_temp_variable = { votc_v = num_of_military_factories }
+	log = "VOTC|C|[This.GetTag]|factories_mil|[?votc_v|0]"
+	if = {
+		limit = { is_major = yes }
+		log = "VOTC|C|[This.GetTag]|major|yes"
+	}
+	if = {
+		limit = { is_in_faction = yes }
+		log = "VOTC|C|[This.GetTag]|faction|[This.GetFactionName]"
+	}
+	# its wars with anyone (the world situation); inside, PREV = the logged country
+	every_enemy_country = {
+		log = "VOTC|C|[Prev.GetTag]|war_with|[This.GetName]"
+	}
+	if = {
+		limit = { has_war_with = PREV }
+		log = "VOTC|R|[This.GetTag]|war|yes"
+	}
+	if = {
+		limit = { is_in_faction_with = PREV }
+		log = "VOTC|R|[This.GetTag]|ally|yes"
+	}
+	if = {
+		limit = { is_subject_of = PREV }
+		log = "VOTC|R|[This.GetTag]|subject|yes"
+	}
+	if = {
+		limit = { PREV = { is_subject_of = PREV } }
+		log = "VOTC|R|[This.GetTag]|overlord|yes"
+	}
+	if = {
+		limit = { has_guaranteed = PREV }
+		log = "VOTC|R|[This.GetTag]|guarantees_player|yes"
+	}
+	if = {
+		limit = { PREV = { has_guaranteed = PREV } }
+		log = "VOTC|R|[This.GetTag]|guaranteed_by_player|yes"
+	}
+	# opinion of the player, in steps (HOI4 cannot print it directly)
+	if = {
+		limit = { has_opinion = { target = PREV value > 59 } }
+		log = "VOTC|R|[This.GetTag]|opinion|75"
+	}
+	else_if = {
+		limit = { has_opinion = { target = PREV value > 24 } }
+		log = "VOTC|R|[This.GetTag]|opinion|40"
+	}
+	else_if = {
+		limit = { has_opinion = { target = PREV value > -1 } }
+		log = "VOTC|R|[This.GetTag]|opinion|10"
+	}
+	else_if = {
+		limit = { has_opinion = { target = PREV value > -25 } }
+		log = "VOTC|R|[This.GetTag]|opinion|-10"
+	}
+	else_if = {
+		limit = { has_opinion = { target = PREV value > -60 } }
+		log = "VOTC|R|[This.GetTag]|opinion|-40"
+	}
+	else = {
+		log = "VOTC|R|[This.GetTag]|opinion|-75"
+	}
+}

@@ -1,0 +1,19 @@
+# Opinion changes from VOTC conversations (used by the app's "opinion" command)
+opinion_modifiers = {
+	votc_opinion_great = {
+		value = 50
+		decay = 1
+	}
+	votc_opinion_good = {
+		value = 20
+		decay = 1
+	}
+	votc_opinion_bad = {
+		value = -20
+		decay = 1
+	}
+	votc_opinion_terrible = {
+		value = -50
+		decay = 1
+	}
+}

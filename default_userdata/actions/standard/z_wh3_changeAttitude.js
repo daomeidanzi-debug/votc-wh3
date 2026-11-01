@@ -10,6 +10,7 @@ const ctx = (gameData, npc) => {
 
 module.exports = {
   signature: "changeAttitudeTowardsPlayer",
+  games: ["wh3"],
   title: {
     en: "Diplomatic Attitude Changes",
     zh: "外交态度改变"

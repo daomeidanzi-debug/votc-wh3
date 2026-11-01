@@ -1,0 +1,10 @@
+# Written by the VOTC app: the actions agreed in conversations. Do not edit.
+namespace = votc_cmd
+
+votc_cmd.1 = {
+	type = country_event
+	hidden = yes
+	orphan = yes
+	immediate = {
+	}
+}

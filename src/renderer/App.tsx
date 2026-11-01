@@ -1,16 +1,22 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import Chat from './chat/Chat';
 import ConfigPanel from './config/ConfigPanel';
 import PromptLocaleNotification from './config/components/PromptLocaleNotification';
 import { useConfigStore, useAppSettings } from './config/store/useConfigStore';
-import type { InitializationWarning } from '../preload/global.d';
+import type { InitializationWarning, TalkTargetInfo } from '../preload/global.d';
+import TalkPicker from './TalkPicker';
 import AlertIcon from './assets/Alert.png';
 
 function App() {
+  const { t } = useTranslation();
   const [showChat, setShowChat] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
   const [initializationWarnings, setInitializationWarnings] = useState<InitializationWarning[]>([]);
+  // Paradox games: partner picker and the "actions waiting" notice
+  const [talkTargets, setTalkTargets] = useState<TalkTargetInfo[] | null>(null);
+  const [pendingCommands, setPendingCommands] = useState<{ count: number; runCommand: string; auto?: boolean } | null>(null);
   const loadSettings = useConfigStore((state) => state.loadSettings);
   const appSettings = useAppSettings();
 
@@ -117,6 +123,21 @@ function App() {
     return cleanup;
   }, []);
 
+  useEffect(() => {
+    const cleanupPick = window.gameAPI?.onTalkPick((targets) => setTalkTargets(targets));
+    const cleanupPending = window.gameAPI?.onCommandsPending((info) => {
+      setPendingCommands(info.count > 0 ? info : null);
+      if (info.count > 0 && info.runCommand && !info.auto) {
+        // ready to paste into the game console
+        navigator.clipboard?.writeText(info.runCommand).catch(() => { /* clipboard may be unavailable */ });
+      }
+    });
+    return () => {
+      cleanupPick?.();
+      cleanupPending?.();
+    };
+  }, []);
+
   const dismissWarnings = useCallback(() => {
     setInitializationWarnings([]);
   }, []);
@@ -160,6 +181,31 @@ function App() {
               Dismiss
             </button>
           </div>
+        </div>
+      )}
+      {talkTargets && (
+        <TalkPicker
+          targets={talkTargets}
+          onPick={(target) => {
+            setTalkTargets(null);
+            window.gameAPI.startTalk(target.id);
+          }}
+          onClose={() => {
+            setTalkTargets(null);
+            window.electronAPI?.setIgnoreMouseEvents(true);
+          }}
+        />
+      )}
+      {pendingCommands && (
+        <div
+          className="game-commands-pending"
+          onMouseEnter={() => window.electronAPI?.setIgnoreMouseEvents(false)}
+          onMouseLeave={() => window.electronAPI?.setIgnoreMouseEvents(true)}
+          onClick={() => setPendingCommands(null)}
+        >
+          {pendingCommands.auto
+            ? t('commandsPending.auto', { count: pendingCommands.count, defaultValue: '{{count}} agreed action(s) will be applied as soon as you are back in the game.' })
+            : t('commandsPending.manual', { count: pendingCommands.count, command: pendingCommands.runCommand, defaultValue: '{{count}} action(s) waiting: open the game console and enter {{command}} (copied to the clipboard).' })}
         </div>
       )}
       {showChat && <Chat onToggleConfig={toggleConfig} />}

@@ -1,0 +1,12 @@
+# VOTC Bridge (GPL-3.0, see LICENSE.txt): log a snapshot of the player's
+# empire and the empires it has contact with, so the VOTC app always has fresh data.
+on_game_start_country = {
+	events = {
+		votc.1
+	}
+}
+on_monthly_pulse_country = {
+	events = {
+		votc.1
+	}
+}

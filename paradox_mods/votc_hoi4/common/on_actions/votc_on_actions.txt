@@ -1,0 +1,20 @@
+# VOTC Bridge (GPL-3.0, see LICENSE.txt): log a snapshot of the player's
+# country and the countries that matter to it, so the VOTC app always has fresh data.
+on_actions = {
+	on_startup = {
+		effect = {
+			every_country = {
+				limit = { is_ai = no }
+				votc_snapshot = yes
+			}
+		}
+	}
+	on_monthly = {
+		effect = {
+			if = {
+				limit = { is_ai = no }
+				votc_snapshot = yes
+			}
+		}
+	}
+}

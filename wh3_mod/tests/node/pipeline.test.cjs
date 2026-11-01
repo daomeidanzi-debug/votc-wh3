@@ -70,8 +70,10 @@ fs.writeFileSync(path.join(STUBS, 'electron.js'), `
   };`);
 fs.writeFileSync(path.join(STUBS, 'settings.js'), `
   let dir = ${JSON.stringify(GAME_DIR)};
+  let game = 'wh3';
   module.exports = { settingsRepository: {
     getCK3UserFolderPath: () => dir, setCK3UserFolderPath: (d) => { dir = d; }, getLanguage: () => 'zh',
+    getActiveGame: () => game, setActiveGame: (g) => { game = g; },
   } };`);
 fs.writeFileSync(path.join(STUBS, 'uuid.js'), `module.exports = { v4: () => require('crypto').randomUUID() };`);
 const origResolve = Module._resolveFilename;
@@ -83,12 +85,17 @@ Module._resolveFilename = function (request, parent, ...rest) {
 };
 const load = (rel) => require(path.join(OUT, rel));
 
-const { toLua, luaString, buildCommandFile } = load('wh3/luaSerialize.js');
-const { buildGameDataFromWh3, describeExportError, WH3_TRAITS } = load('wh3/buildGameData.js');
-const { ActionEffectWriter } = load('actions/ActionEffectWriter.js');
+const { toLua, luaString, buildCommandFile } = load('games/totalwar/luaSerialize.js');
+const { buildGameDataFromWh3, describeExportError, WH3_TRAITS } = load('games/totalwar/buildGameData.js');
+const { getAdapter } = load('games/index.js');
+const wh3Game = getAdapter('wh3');
+// same validation the app applies before a command reaches the bridge
+const ActionEffectWriter = { parseCommand: (c) => wh3Game.parseCommand(c) };
 const { ActionSandbox } = load('actions/ActionSandbox.js');
-const { Wh3Bridge, formatId } = load('wh3/Wh3Bridge.js');
-const { parseSteamLibraryFolders, Wh3PathDetector, isWh3GameDir } = load('wh3/Wh3PathDetector.js');
+const { TotalWarBridge: Wh3Bridge, formatId } = load('games/totalwar/TotalWarBridge.js');
+const { parseSteamLibraryFolders } = load('games/steam.js');
+const Wh3PathDetector = { detect: (c) => wh3Game.detectFolder(c) };
+const isWh3GameDir = (d) => wh3Game.isValidFolder(d);
 const { initializationService } = load('utils/InitializationService.js');
 
 const fixture = (name) => JSON.parse(fs.readFileSync(path.join(fixturesDir, name), 'utf-8'));
@@ -230,7 +237,7 @@ function pickArgs(argDefs) {
   });
 
   await section('backstories and game lore', () => {
-    const { applyBackstories, ensureBackstoriesDir, MAX_BACKSTORY_CHARS } = load('wh3/backstories.js');
+    const { applyBackstories, ensureBackstoriesDir, MAX_BACKSTORY_CHARS } = load('games/backstories.js');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'votc_lore_'));
     ensureBackstoriesDir(dir);
     check(fs.existsSync(path.join(dir, 'README.txt')), 'README created');
@@ -301,7 +308,12 @@ function pickArgs(argDefs) {
     check(ActionEffectWriter.parseCommand('{"op":"peace","a":"x","b":"y"}').op === 'peace', 'accepts JSON text');
   });
 
-  const files = fs.readdirSync(ACTIONS_DIR).filter((f) => f.endsWith('.js'));
+  // the actions folder holds every game's actions; these tests are about Warhammer III's
+  const files = fs.readdirSync(ACTIONS_DIR).filter((f) => {
+    if (!f.endsWith('.js')) return false;
+    const games = loadAction(path.join(ACTIONS_DIR, f)).games;
+    return !games || games.includes('wh3');
+  });
   const expectForeign = {
     noOp: true, paysGoldToPlayer: true, playerPaysGold: true, changeAttitudeTowardsPlayer: true,
     declaresWarOnPlayer: true, makesPeaceWithPlayer: false, formsAllianceWithPlayer: true, signsTradeAgreement: true,

@@ -1,3 +1,4 @@
+import fs from "fs";
 import { GameData, Memory } from "../gameData/GameData";
 import { Character } from "../gameData/Character";
 import { Message } from "./types";
@@ -7,6 +8,7 @@ import { settingsRepository } from "../SettingsRepository";
 import { promptConfigManager } from "./PromptConfigManager";
 import { ILLMMessage, PromptBlock, PromptSettings } from "@llmTypes";
 import { TokenCounter, StateDiffer } from "../utils";
+import { promptVariantsFor } from "../games/types";
 
 export interface PromptBlockWithTokens {
     block: PromptBlock;
@@ -72,7 +74,8 @@ export class PromptBuilder {
             throwOnError?: boolean;
         }
     ): PromptBuildResult {
-        const promptSettings = settingsRepository.getPromptSettings();
+        // every game keeps its own prompt settings
+        const promptSettings = settingsRepository.getPromptSettings(gameData.game);
         const blocks = promptSettings.blocks || [];
         const llmMessages: any[] = [];
         const blocksWithTokens: PromptBlockWithTokens[] = [];
@@ -151,6 +154,20 @@ export class PromptBuilder {
             }
         }
 
+        // The language rule goes last, right before the model writes (it holds even for an
+        // edited main prompt): personas, lore and examples mix English game text into
+        // conversations in other languages, and without it replies mix the languages.
+        const rule = PromptBuilder.languageRule();
+        const instruction = blocksWithTokens.find((b) => b.block.type === 'instruction' && b.messages?.length);
+        if (instruction && instruction.messages) {
+            // the same message objects are in llmMessages
+            const msg = instruction.messages[instruction.messages.length - 1];
+            msg.content = `${msg.content}\n${rule}`;
+            instruction.content = `${instruction.content}\n${rule}`;
+        } else {
+            llmMessages.push({ role: 'system', content: rule });
+        }
+
         const errors = blocksWithTokens
             .map(b => b.error)
             .filter((e): e is string => !!e);
@@ -202,6 +219,29 @@ export class PromptBuilder {
         /**
      * Build context from character's past conversation summaries
      */
+    /**
+     * The script in the app's language: a Chinese app uses pListMccTest2_ZH.js for
+     * pListMccTest2.js when that file exists (for the game or in general). Saved settings keep
+     * the English names when the language was chosen before the switch existed.
+     */
+    static localeScript(scriptPath: string, game: GameData['game']): string {
+        const lang = (settingsRepository.getLanguage() || '').toLowerCase().split('-')[0];
+        if (lang !== 'zh' || !settingsRepository.getAutoSwitchPromptLocale?.()) return scriptPath;
+        if (/_[A-Z]{2}\.js$/.test(scriptPath)) return scriptPath;
+        const zh = scriptPath.replace(/\.js$/, '_ZH.js');
+        const resolved = promptConfigManager.resolveForGame(zh, promptVariantsFor(game));
+        return fs.existsSync(resolved) ? zh : scriptPath;
+    }
+
+    /**
+     * One language for the whole reply: whatever language the player writes in. Said in
+     * English and Chinese so it holds whichever language the rest of the prompt uses.
+     */
+    static languageRule(): string {
+        return '[Language: reply entirely in the language of the player\'s latest message. Do not mix languages: translate names, titles, places and terms from the persona and context into that language. '
+            + '语言：用玩家最后一句话所用的语言回复整段内容，不要混用语言；人物资料和背景里其他语言的名字、头衔、地名、术语都译成那种语言。]';
+    }
+
     static buildPastSummariesContext(char: Character, gameData: GameData): string | null {
         if (!char.conversationSummaries || char.conversationSummaries.length === 0) {
             return null;
@@ -243,7 +283,7 @@ static buildFinalSummary(
 
     const baseSystem = {
         role: 'system',
-        content: `You are summarizing a Warhammer fantasy roleplay conversation between these characters: ${characters}.`
+        content: `You are summarizing a roleplay conversation set in ${gameData.gameName} (${gameData.gameSetting}) between these characters: ${characters}.`
     };
 
     const buildConversationText = (msgs: Message[], title: string) => ({
@@ -353,7 +393,7 @@ static buildFinalSummary(
         try {
             switch (block.type) {
                 case 'main': {
-                    const template = promptSettings.mainTemplate || promptConfigManager.getDefaultMainTemplateContent();
+                    const template = promptConfigManager.mainTemplateForGame(promptSettings.mainTemplate, promptVariantsFor(gameData.game));
                     const content = renderTemplate(template, baseContext);
                     if (content?.trim()) {
                         const role = block.role || 'system';
@@ -364,7 +404,7 @@ static buildFinalSummary(
                 }
                 case 'description': {
                     if (!block.scriptPath) return null;
-                    const descScriptPath = promptConfigManager.resolvePath(block.scriptPath);
+                    const descScriptPath = promptConfigManager.resolveForGame(PromptBuilder.localeScript(block.scriptPath, gameData.game), promptVariantsFor(gameData.game));
                     let descriptionBlock: string;
                     try {
                         descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
@@ -380,7 +420,7 @@ static buildFinalSummary(
                 }
                 case 'examples': {
                     if (!block.scriptPath) return null;
-                    const examplesScriptPath = promptConfigManager.resolvePath(block.scriptPath);
+                    const examplesScriptPath = promptConfigManager.resolveForGame(PromptBuilder.localeScript(block.scriptPath, gameData.game), promptVariantsFor(gameData.game));
                     let exampleMessages: any[];
                     try {
                         exampleMessages = this.scriptLoader.executeExamples(examplesScriptPath, gameData, character.id);

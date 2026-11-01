@@ -1,13 +1,14 @@
 import { app, BrowserWindow, screen, ipcMain, dialog, Tray, Menu, globalShortcut, shell, nativeImage } from 'electron';
+import { APP_TITLE } from './appIdentity';
 import path from 'path';
 import { llmManager } from './LLMManager';
 import { settingsRepository } from './SettingsRepository';
 import { providerRegistry } from './llmProviders/ProviderRegistry';
 import { conversationManager } from './conversation/ConversationManager';
 import { LLMProviderConfig, PromptPreset, PromptSettings, ConnectionTestSubResult } from '@llmTypes';
-import { wh3Bridge } from './wh3/Wh3Bridge';
-import type { Wh3CommandResult } from './wh3/types';
-import { isWh3GameDir } from './wh3/Wh3PathDetector';
+import { activeGame, getAdapter, listGames } from './games';
+import { isGameId } from './games/types';
+import type { CommandFailure, GameAdapter, TalkRequest } from './games/types';
 import {
   initLogger, clearLog,
   importLegacySummaries,
@@ -16,7 +17,7 @@ import {
   initializationService
 } from './utils';
 import { VOTC_ACTIONS_DIR, VOTC_PROMPTS_DIR, VOTC_SUMMARIES_DIR, VOTC_BACKSTORIES_DIR } from './utils/paths';
-import { ensureBackstoriesDir } from './wh3/backstories';
+import { ensureBackstoriesDir } from './games/backstories';
 import { actionRegistry } from './actions/ActionRegistry';
 import { ActionEngine } from './actions/ActionEngine';
 import { promptConfigManager } from './conversation/PromptConfigManager';
@@ -38,7 +39,7 @@ import './llmProviders/GeminiProvider';
 import { letterManager } from './letter/LetterManager';
 import { v4 as uuidv4 } from 'uuid';
 
-/** Global hotkeys that open a conversation with the character selected in game, in order of preference. */
+/** Global hotkeys that open a conversation (with the character selected in game, or a picker), in order of preference. */
 const TALK_HOTKEYS = ['Control+Alt+T', 'Control+Shift+T', 'Control+Alt+Y'];
 import { finalizeConnectionTestResult } from './llmProviders/connectionTest';
 
@@ -202,7 +203,7 @@ const setupIpcHandlers = () => {
   });
 
   ipcMain.handle('prompts:getDefaultMain', () => {
-    return promptConfigManager.getDefaultMainTemplateContent();
+    return settingsRepository.getDefaultMainTemplateForGame();
   });
   ipcMain.handle('prompts:getDefaultLetterMain', () => {
     return promptConfigManager.getDefaultLetterMainTemplateContent();
@@ -430,16 +431,36 @@ const setupIpcHandlers = () => {
   });
 
   ipcMain.handle('llm:setCK3Folder', async (_, folder: string | null) => {
-    // Stores the Warhammer III install folder. Accept the data/ subfolder by mistake too.
-    let gameDir = folder;
-    if (gameDir && !isWh3GameDir(gameDir) && isWh3GameDir(path.dirname(gameDir))) {
-      gameDir = path.dirname(gameDir);
+    // Stores the folder of the active game. Accept a subfolder by mistake too (e.g. data/).
+    const game = activeGame();
+    const gameDir = folder ? game.normalizeFolder(folder) : folder;
+    if (gameDir && !game.isValidFolder(gameDir)) {
+      console.warn(`Selected folder is not a ${game.name.en} folder: ${gameDir}`);
     }
-    if (gameDir && !isWh3GameDir(gameDir)) {
-      console.warn(`Selected folder does not contain Warhammer3.exe: ${gameDir}`);
-    }
+    game.clear();
     settingsRepository.setCK3UserFolderPath(gameDir);
-    wh3Bridge.clear();
+    // watchers read from the folder; restart them there
+    game.start();
+    return settingsRepository.getCK3UserFolderPath();
+  });
+
+  ipcMain.handle('game:list', () => listGames(settingsRepository.getLanguage()));
+
+  ipcMain.handle('game:getActive', () => ({
+    id: activeGame().id,
+    folder: settingsRepository.getCK3UserFolderPath() ?? null,
+  }));
+
+  ipcMain.handle('game:setActive', async (_, id: string) => {
+    if (!isGameId(id)) throw new Error(`Unknown game: ${id}`);
+    await switchGame(id);
+    return { id: activeGame().id, folder: settingsRepository.getCK3UserFolderPath() ?? null, warnings: initializationService.getWarnings() };
+  });
+
+  // Paradox games: the player picks the conversation partner in the app
+  ipcMain.handle('talk:listTargets', (_, tag?: string) => activeGame().listTalkTargets?.(tag) ?? []);
+  ipcMain.handle('talk:start', (_, targetId: string) => {
+    startConversation(targetId);
   });
 
   ipcMain.handle('llm:setModLocationPath', (_, path: string | null) => {
@@ -834,13 +855,16 @@ const setupIpcHandlers = () => {
         }
       }
       
-      // Warhammer III: the mod loader log plus the bridge files in the game folder
+      // the active game's logs and bridge files
       const ck3Path = settingsRepository.getCK3UserFolderPath();
       if (ck3Path) {
-        for (const name of ['lua_mod_log.txt', 'votc_state.json', 'votc_ack.json', 'votc_commands.lua']) {
-          const src = path.join(ck3Path, name);
-          if (fs.existsSync(src)) {
-            fs.copyFileSync(src, path.join(logsFolder, name));
+        for (const src of activeGame().diagnosticFiles(ck3Path)) {
+          try {
+            if (fs.existsSync(src)) {
+              fs.copyFileSync(src, path.join(logsFolder, `${activeGame().id}-${path.basename(src)}`));
+            }
+          } catch (error) {
+            console.warn(`Could not copy ${src}:`, error);
           }
         }
       }
@@ -853,7 +877,8 @@ const setupIpcHandlers = () => {
         nodeVersion: process.version,
         electronVersion: process.versions.electron,
         appVersion: app.getVersion(),
-        ck3Path: ck3Path || 'Not set'
+        game: activeGame().id,
+        gameFolder: ck3Path || 'Not set'
       };
       
       fs.writeFileSync(
@@ -1160,6 +1185,137 @@ const setupIpcHandlers = () => {
 /**
  * Set up focus monitoring to adjust overlay level based on active window
  */
+// ------------------------------------------------------------------ games
+
+let attachedGame: GameAdapter | null = null;
+const gameListeners: Array<[string, (...args: any[]) => void]> = [];
+
+/** Show the chat window and start a conversation (optionally with a partner picked in the app). */
+function startConversation(targetId?: string): void {
+  if (!chatWindow || chatWindow.isDestroyed()) {
+    chatWindow = createWindow();
+  }
+  const conversation = conversationManager.createConversation(targetId);
+  const window = chatWindow;
+  if (activeGame().family === 'totalwar') {
+    // Total War stops running script timers while it is in the background, so the
+    // game must keep focus until it has answered the export request. Show the window
+    // without activating it, and take focus only once the game data has arrived.
+    if (window.isFocused()) {
+      // hand focus back to the window below (normally the game) so its scripts run
+      window.blur();
+    }
+    window.showInactive();
+  }
+  window.webContents.send('chat-reset'); // This will trigger showChat in App.tsx
+  const focusChat = () => {
+    if (!window.isDestroyed()) {
+      window.show();
+      window.focus();
+    }
+  };
+  if (conversation && activeGame().family === 'totalwar') {
+    conversation.ready.then(focusChat, focusChat);
+  } else {
+    focusChat();
+  }
+}
+
+/** Paradox games: show who the player can talk to (optionally one country's people). */
+function showTalkPicker(tag?: string): void {
+  const game = activeGame();
+  if (!game.listTalkTargets) return;
+  if (!chatWindow || chatWindow.isDestroyed()) {
+    chatWindow = createWindow();
+  }
+  chatWindow.show();
+  chatWindow.focus();
+  chatWindow.webContents.send('talk-pick', game.listTalkTargets(tag || undefined));
+}
+
+/** The talk hotkey: Paradox games open a partner picker, the others ask the game. */
+function onTalkHotkey(): void {
+  const game = activeGame();
+  console.log(`Talk hotkey triggered (${game.id})`);
+  if (game.listTalkTargets) {
+    showTalkPicker();
+    return;
+  }
+  if (game.id === 'ck3') {
+    // CK3 starts conversations from the in-game Talk interaction
+    chatWindow?.webContents.send('initialization-warnings', [{
+      type: 'path_detection',
+      message: 'In Crusader Kings III, use the "Talk" interaction on a character to start a conversation.',
+    }]);
+    return;
+  }
+  startConversation();
+}
+
+/** Subscribe to the active game's events (and drop the previous game's). */
+function attachGame(game: GameAdapter): void {
+  if (attachedGame) {
+    for (const [event, fn] of gameListeners) attachedGame.off(event, fn);
+    attachedGame.stop();
+  }
+  gameListeners.length = 0;
+  const on = (event: string, fn: (...args: any[]) => void) => {
+    game.on(event, fn);
+    gameListeners.push([event, fn]);
+  };
+  // Report actions the game rejected (e.g. not enough gold, character already dead)
+  on('command-failed', (failure: CommandFailure) => {
+    const conversation = conversationManager.getCurrentConversation();
+    conversation?.addSystemError(`Game action "${failure.op}" failed`, failure.message);
+  });
+  // CK3: the in-game Talk interaction
+  on('talk', () => startConversation());
+  // Paradox games: right-click Talk / the in-game talk button
+  on('talk-request', (request: TalkRequest) => {
+    if (request.targetId) startConversation(request.targetId);
+    else showTalkPicker(request.tag);
+  });
+  on('letter', async () => {
+    try {
+      await letterManager.processLatestLetter();
+    } catch (error) {
+      console.error('Failed to process letter:', error);
+    }
+  });
+  on('letter-accepted', () => {
+    try {
+      letterManager.clearLettersFile();
+    } catch (error) {
+      console.error('Failed to clear letters file:', error);
+    }
+  });
+  // Paradox games: tell the player how to apply queued actions
+  on('commands-pending', (count: number) => {
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('game-commands-pending', { count, runCommand: game.runCommand ?? '', auto: !!game.autoApplies });
+    }
+  });
+  // Paradox games type the run command into the console only while the game is in front
+  game.setGameFocusProbe?.(() => focusMonitor.isGameFocused());
+  game.clear();
+  game.start();
+  attachedGame = game;
+  if (tray) tray.setToolTip(`${APP_TITLE} - ${game.name.en}`);
+}
+
+async function switchGame(id: string): Promise<void> {
+  if (!isGameId(id)) return;
+  if (attachedGame?.id === id) return;
+  conversationManager.endCurrentConversation();
+  settingsRepository.setActiveGame(id);
+  const result = await initializationService.initialize();
+  console.log(`Switched to ${id}:`, result);
+  attachGame(getAdapter(id));
+  // actions are filtered by game
+  actionRegistry.reloadActions().catch(err => console.error('Failed to reload actions after switching games:', err));
+  letterManager.restartLogTailing().catch(() => { /* letters are CK3 only */ });
+}
+
 const setupFocusMonitoring = (window: BrowserWindow) => {
   focusMonitor.on('overlay-state-changed', (isOverlay: boolean) => {
     if (!window || window.isDestroyed()) return;
@@ -1191,17 +1347,17 @@ app.on('ready', async () => {
   promptConfigManager.seedDefaults();
   setupIpcHandlers(); // Setup handlers first
   
-  // Detect the Warhammer III folder and check the mod / write access
+  // Detect the active game's folder and check the mod / write access
   const initResult = await initializationService.initialize();
   console.log('Initialization result:', initResult);
-  // Leftover commands from a previous session must never reach the game
-  wh3Bridge.clear();
+  // Leftover commands from a previous session must never reach the game (attachGame clears them)
+  attachGame(activeGame());
   ensureBackstoriesDir(VOTC_BACKSTORIES_DIR);
 
   chatWindow = createWindow(); // Create the main chat window and assign to global
 
   // Auto-update is disabled: the update feed belongs to the original CK3 VOTC and
-  // would replace this Warhammer III port with the CK3 build.
+  // would replace this multi-game build with the CK3-only build.
   appUpdater.setMainWindow(chatWindow);
   
   // Send initialization warnings to renderer after it's ready
@@ -1259,50 +1415,9 @@ app.on('ready', async () => {
     }
   ];
 
-  // Start a conversation with whoever is selected in Warhammer III
-  const startTalk = () => {
-    console.log('Talk hotkey triggered - showing chat interface');
-
-    // Ensure window exists
-    if (!chatWindow || chatWindow.isDestroyed()) {
-      console.log('Creating new chat window');
-      chatWindow = createWindow();
-    }
-
-    const conversation = conversationManager.createConversation();
-
-    // Warhammer III stops running script timers while it is in the background, so the
-    // game must keep focus until it has answered the export request. Show the window
-    // without activating it, and take focus only once the game data has arrived.
-    const window = chatWindow;
-    if (window.isFocused()) {
-      // hand focus back to the window below (normally the game) so its scripts run
-      window.blur();
-    }
-    window.showInactive();
-    window.webContents.send('chat-reset'); // This will trigger showChat in App.tsx
-    const focusChat = () => {
-      if (!window.isDestroyed()) {
-        window.show();
-        window.focus();
-      }
-    };
-    if (conversation) {
-      conversation.ready.then(focusChat, focusChat);
-    } else {
-      focusChat();
-    }
-  };
-
-  // Report actions the game rejected (e.g. not enough gold, character already dead)
-  wh3Bridge.on('command-failed', (result: Wh3CommandResult) => {
-    const conversation = conversationManager.getCurrentConversation();
-    conversation?.addSystemError(`Game action "${result.op}" failed`, result.message);
-  });
-
   let talkAccel: string | null = null;
   for (const accel of TALK_HOTKEYS) {
-    if (globalShortcut.register(accel, startTalk)) {
+    if (globalShortcut.register(accel, onTalkHotkey)) {
       talkAccel = accel;
       break;
     }
@@ -1310,9 +1425,9 @@ app.on('ready', async () => {
   }
   console.log(`Talk shortcut registered: ${talkAccel ?? 'none'}`);
   if (tray) {
-    tray.setToolTip(`VOTC for Warhammer III - talk: ${talkAccel ?? 'tray menu'}`);
+    tray.setToolTip(`${APP_TITLE} - ${activeGame().name.en} - talk: ${talkAccel ?? 'tray menu'}`);
     tray.setContextMenu(Menu.buildFromTemplate([
-      { label: `Talk to selected character${talkAccel ? ` (${talkAccel})` : ''}`, click: startTalk },
+      { label: `Talk${talkAccel ? ` (${talkAccel})` : ''}`, click: onTalkHotkey },
       ...contextMenuItems,
     ]));
   }
@@ -1377,7 +1492,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   tray?.destroy();
   globalShortcut.unregisterAll();
-  wh3Bridge.dispose();
+  attachedGame?.stop();
   // Stop letter manager log tailing
   letterManager.stopLogTailing();
   // Stop focus monitoring

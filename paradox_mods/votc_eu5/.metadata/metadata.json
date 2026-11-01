@@ -1,0 +1,12 @@
+{
+  "name": "VOTC Bridge - Europa Universalis V",
+  "id": "votc.eu5.bridge",
+  "version": "2.0.0",
+  "supported_game_version": "1.*",
+  "short_description": "Talk to any character with the VOTC app (right-click > Talk (VOTC)); agreed actions are applied automatically. Needs the -debug_mode launch option.",
+  "tags": [
+    "Utilities"
+  ],
+  "relationships": [],
+  "game_custom_data": {}
+}

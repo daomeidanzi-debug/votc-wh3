@@ -1,0 +1,18 @@
+# VOTC Bridge (GPL-3.0, see LICENSE.txt). The list below is appended to the
+# game's own monthly pulse; the effect lives in our own on_action so nothing is overwritten.
+
+# Root = Country
+monthly_country_pulse = {
+	on_actions = {
+		votc_on_monthly_country
+	}
+}
+
+votc_on_monthly_country = {
+	trigger = {
+		is_ai = no
+	}
+	effect = {
+		votc_snapshot = { REASON = monthly }
+	}
+}
